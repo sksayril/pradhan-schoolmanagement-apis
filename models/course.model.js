@@ -166,6 +166,13 @@ const courseSchema = new mongoose.Schema({
     default: 0
   },
   
+  // Course ID
+  courseId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  
   // Created By
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -202,9 +209,9 @@ courseSchema.pre('save', async function(next) {
   next();
 });
 
-// Virtual for course ID
-courseSchema.virtual('courseId').get(function() {
-  return this._id ? `CRS${this._id.toString().slice(-6)}` : null;
+// Virtual for formatted course ID (for display purposes)
+courseSchema.virtual('formattedCourseId').get(function() {
+  return this.courseId || (this._id ? `CRS${this._id.toString().slice(-6)}` : null);
 });
 
 // Method to check if course is full (for offline courses)

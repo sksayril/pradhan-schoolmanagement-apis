@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const batchSchema = new mongoose.Schema({
+  // Batch ID
+  batchId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  
   // Basic Information
   name: {
     type: String,
@@ -128,9 +135,9 @@ batchSchema.pre('save', async function(next) {
   next();
 });
 
-// Virtual for batch ID
-batchSchema.virtual('batchId').get(function() {
-  return this._id ? `BAT${this._id.toString().slice(-6)}` : null;
+// Virtual for formatted batch ID (for display purposes)
+batchSchema.virtual('formattedBatchId').get(function() {
+  return this.batchId || (this._id ? `BAT${this._id.toString().slice(-6)}` : null);
 });
 
 // Method to check if batch is full

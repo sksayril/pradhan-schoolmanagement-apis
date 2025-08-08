@@ -199,8 +199,7 @@ const studentSchema = new mongoose.Schema({
     },
     certificateNumber: {
       type: String,
-      required: true,
-      unique: true
+      required: true
     },
     issuedDate: {
       type: Date,
@@ -266,5 +265,13 @@ studentSchema.methods.isKycComplete = function() {
          this.kycDocuments.panCard.document &&
          this.kycDocuments.profilePhoto;
 };
+
+// Create a sparse compound index for certificate numbers to ensure uniqueness
+// This will only index documents that have certificates with certificateNumber
+studentSchema.index({ 'certificates.certificateNumber': 1 }, { 
+  unique: true, 
+  sparse: true,
+  partialFilterExpression: { 'certificates.certificateNumber': { $exists: true, $ne: null } }
+});
 
 module.exports = mongoose.model('Student', studentSchema); 

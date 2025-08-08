@@ -27,7 +27,7 @@ const storage = multer.diskStorage({
       uploadPath = path.join(uploadsDir, 'kyc');
     } else if (file.fieldname === 'profilePhoto') {
       uploadPath = path.join(uploadsDir, 'profiles');
-    } else if (file.fieldname === 'coursePdf' || file.fieldname === 'courseVideo') {
+    } else if (file.fieldname === 'coursePdf' || file.fieldname === 'courseVideo' || file.fieldname === 'thumbnail' || file.fieldname === 'banner') {
       uploadPath = path.join(uploadsDir, 'courses');
     } else if (file.fieldname === 'certificate') {
       uploadPath = path.join(uploadsDir, 'certificates');
@@ -56,7 +56,7 @@ const fileFilter = (req, file, cb) => {
   let allowedTypes = [];
   
   // Determine allowed types based on field name
-  if (file.fieldname === 'profilePhoto') {
+  if (file.fieldname === 'profilePhoto' || file.fieldname === 'thumbnail' || file.fieldname === 'banner') {
     allowedTypes = allowedImageTypes;
   } else if (file.fieldname === 'aadharDocument' || file.fieldname === 'panDocument') {
     allowedTypes = allowedDocumentTypes;
