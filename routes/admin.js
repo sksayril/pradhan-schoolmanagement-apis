@@ -9,6 +9,14 @@ const { authenticateAdmin, checkPermission } = require('../middleware/auth');
 const { courseUpload, certificateUpload, marksheetUpload, handleUploadError } = require('../middleware/upload');
 const { createProduct, createPrice } = require('../utilities/razorpay');
 
+// Normalize filesystem path to web URL path under /uploads
+function toWebPath(filePath) {
+  if (!filePath) return filePath;
+  const parts = String(filePath).split('uploads');
+  const rel = parts.length > 1 ? parts[1] : '';
+  return ('/uploads' + rel).replace(/\\/g, '/');
+}
+
 // Admin Signup
 router.post('/signup', async (req, res) => {
   try {
@@ -284,12 +292,12 @@ router.post('/students/:studentId/approve-kyc', authenticateAdmin, checkPermissi
       });
     }
 
-    if (!student.kycDocuments.aadharCard.document || 
-        !student.kycDocuments.panCard.document || 
-        !student.kycDocuments.profilePhoto) {
+    // PAN is optional now. Require Aadhar document and profile photo only
+    if (!student?.kycDocuments?.aadharCard?.document || 
+        !student?.kycDocuments?.profilePhoto) {
       return res.status(400).json({
         success: false,
-        message: 'KYC documents are not complete'
+        message: 'KYC documents are not complete (Aadhar document and profile photo required)'
       });
     }
 
@@ -691,13 +699,13 @@ router.post('/courses', authenticateAdmin, checkPermission('manage_courses'), co
     // Handle uploaded files
     if (req.files) {
       if (req.files.thumbnail && req.files.thumbnail[0]) {
-        courseData.thumbnail = req.files.thumbnail[0].path;
+        courseData.thumbnail = toWebPath(req.files.thumbnail[0].path);
       }
       if (req.files.banner && req.files.banner[0]) {
-        courseData.banner = req.files.banner[0].path;
+        courseData.banner = toWebPath(req.files.banner[0].path);
       }
       if (req.files.coursePdf && req.files.coursePdf[0] && courseType === 'online') {
-        courseData.onlineCourse.pdfContent = req.files.coursePdf[0].path;
+        courseData.onlineCourse.pdfContent = toWebPath(req.files.coursePdf[0].path);
       }
     }
 
@@ -1282,7 +1290,7 @@ router.post('/certificates', authenticateAdmin, checkPermission('manage_certific
     };
 
     if (req.file) {
-      certificate.certificateUrl = req.file.path;
+      certificate.certificateUrl = toWebPath(req.file.path);
     }
 
     student.certificates.push(certificate);
