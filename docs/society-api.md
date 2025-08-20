@@ -380,7 +380,7 @@ Authorization: Bearer <token>
 ```
 
 ---
-
+****************************************ADMIN SOCITY*************************************************
 ## Admin Society Management APIs
 
 ### 1. Admin Login
