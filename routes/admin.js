@@ -9,6 +9,14 @@ const { authenticateAdmin, requirePermission } = require('../middleware/auth');
 const { courseUpload, certificateUpload, marksheetUpload, handleUploadError } = require('../middleware/upload');
 const { createProduct, createPrice } = require('../utilities/razorpay');
 
+// Normalize filesystem path to web URL path under /uploads
+function toWebPath(filePath) {
+  if (!filePath) return filePath;
+  const parts = String(filePath).split('uploads');
+  const rel = parts.length > 1 ? parts[1] : '';
+  return ('/uploads' + rel).replace(/\\/g, '/');
+}
+
 // Admin Signup
 router.post('/signup', async (req, res) => {
   try {
@@ -284,12 +292,12 @@ router.post('/students/:studentId/approve-kyc', authenticateAdmin, requirePermis
       });
     }
 
-    if (!student.kycDocuments.aadharCard.document || 
-        !student.kycDocuments.panCard.document || 
-        !student.kycDocuments.profilePhoto) {
+    // PAN is optional now. Require Aadhar document and profile photo only
+    if (!student?.kycDocuments?.aadharCard?.document || 
+        !student?.kycDocuments?.profilePhoto) {
       return res.status(400).json({
         success: false,
-        message: 'KYC documents are not complete'
+        message: 'KYC documents are not complete (Aadhar document and profile photo required)'
       });
     }
 
@@ -323,7 +331,7 @@ router.post('/students/:studentId/approve-kyc', authenticateAdmin, requirePermis
 });
 
 // Reject KYC
-router.put('/students/:studentId/reject-kyc', authenticateAdmin, requirePermission('manage_kyc'), async (req, res) => {
+router.post('/students/:studentId/reject-kyc', authenticateAdmin, requirePermission('manage_kyc'), async (req, res) => {
   try {
     const { reason } = req.body;
     
@@ -496,6 +504,7 @@ router.get('/students/:studentId/with-original-password', authenticateAdmin, req
 // Create Course
 router.post('/courses', authenticateAdmin, requirePermission('manage_courses'), courseUpload, handleUploadError, async (req, res) => {
   try {
+    // Validate required fields
     const {
       title,
       description,
@@ -514,27 +523,156 @@ router.post('/courses', authenticateAdmin, requirePermission('manage_courses'), 
       offlineCourse
     } = req.body;
 
+    // Check required fields
+    if (!title || !description || !courseType || !category || !duration || !level || !price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: title, description, courseType, category, duration, level, price'
+      });
+    }
+
+    // Validate course type
+    if (!['online', 'offline'].includes(courseType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid courseType. Must be "online" or "offline"'
+      });
+    }
+
+    // Validate category
+    const validCategories = ['programming', 'design', 'marketing', 'business', 'language', 'music', 'art', 'technology', 'health', 'other'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid category. Must be one of: ${validCategories.join(', ')}`
+      });
+    }
+
+    // Validate level
+    const validLevels = ['beginner', 'intermediate', 'advanced'];
+    if (!validLevels.includes(level)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid level. Must be one of: ${validLevels.join(', ')}`
+      });
+    }
+
+    // Parse and validate numeric fields
+    const durationNum = parseInt(duration);
+    const priceNum = parseFloat(price);
+    const originalPriceNum = originalPrice ? parseFloat(originalPrice) : null;
+
+    if (isNaN(durationNum) || durationNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duration must be a positive number'
+      });
+    }
+
+    if (isNaN(priceNum) || priceNum < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Price must be a non-negative number'
+      });
+    }
+
+    if (originalPriceNum !== null && (isNaN(originalPriceNum) || originalPriceNum < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Original price must be a non-negative number'
+      });
+    }
+
+    // Parse JSON fields with error handling
+    let syllabusData = [];
+    let prerequisitesData = [];
+    let learningOutcomesData = [];
+    let offlineCourseData = null;
+
+    try {
+      syllabusData = syllabus ? JSON.parse(syllabus) : [];
+      if (!Array.isArray(syllabusData)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Syllabus must be a valid JSON array'
+        });
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid syllabus JSON format'
+      });
+    }
+
+    try {
+      prerequisitesData = prerequisites ? JSON.parse(prerequisites) : [];
+      if (!Array.isArray(prerequisitesData)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Prerequisites must be a valid JSON array'
+        });
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid prerequisites JSON format'
+      });
+    }
+
+    try {
+      learningOutcomesData = learningOutcomes ? JSON.parse(learningOutcomes) : [];
+      if (!Array.isArray(learningOutcomesData)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Learning outcomes must be a valid JSON array'
+        });
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid learning outcomes JSON format'
+      });
+    }
+
+    // Parse offline course data if provided
+    if (courseType === 'offline' && offlineCourse) {
+      try {
+        offlineCourseData = JSON.parse(offlineCourse);
+        if (typeof offlineCourseData !== 'object' || offlineCourseData === null) {
+          return res.status(400).json({
+            success: false,
+            message: 'Offline course data must be a valid JSON object'
+          });
+        }
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid offline course JSON format'
+        });
+      }
+    }
+
     const courseData = {
-      title,
-      description,
-      shortDescription,
+      title: title.trim(),
+      description: description.trim(),
+      shortDescription: shortDescription ? shortDescription.trim() : undefined,
       courseType,
       category,
-      subcategory,
-      duration: parseInt(duration),
+      subcategory: subcategory ? subcategory.trim() : undefined,
+      duration: durationNum,
       level,
-      language,
-      price: parseFloat(price),
-      originalPrice: originalPrice ? parseFloat(originalPrice) : null,
-      syllabus: JSON.parse(syllabus || '[]'),
-      prerequisites: JSON.parse(prerequisites || '[]'),
-      learningOutcomes: JSON.parse(learningOutcomes || '[]'),
+      language: language || 'English',
+      price: priceNum,
+      originalPrice: originalPriceNum,
+      syllabus: syllabusData,
+      prerequisites: prerequisitesData,
+      learningOutcomes: learningOutcomesData,
       createdBy: req.admin._id
     };
 
     // Handle offline course data
-    if (courseType === 'offline' && offlineCourse) {
-      courseData.offlineCourse = JSON.parse(offlineCourse);
+    if (courseType === 'offline' && offlineCourseData) {
+      courseData.offlineCourse = offlineCourseData;
     }
 
     // Handle online course data
@@ -542,40 +680,89 @@ router.post('/courses', authenticateAdmin, requirePermission('manage_courses'), 
       courseData.onlineCourse = {};
       
       // Create Razorpay product and price for online courses
-      const productResult = await createProduct(title, description);
-      if (productResult.success) {
-        courseData.onlineCourse.razorpayProductId = productResult.product.id;
-        
-        const priceResult = await createPrice(productResult.product.id, parseFloat(price));
-        if (priceResult.success) {
-          courseData.onlineCourse.razorpayPriceId = priceResult.price.id;
+      try {
+        const productResult = await createProduct(title, description);
+        if (productResult.success) {
+          courseData.onlineCourse.razorpayProductId = productResult.product.id;
+          
+          const priceResult = await createPrice(productResult.product.id, priceNum);
+          if (priceResult.success) {
+            courseData.onlineCourse.razorpayPriceId = priceResult.price.id;
+          }
         }
+      } catch (error) {
+        console.error('Razorpay integration error:', error);
+        // Continue without Razorpay integration if it fails
       }
     }
 
     // Handle uploaded files
     if (req.files) {
-      if (req.files.thumbnail) {
-        courseData.thumbnail = req.files.thumbnail[0].path;
+      if (req.files.thumbnail && req.files.thumbnail[0]) {
+        courseData.thumbnail = toWebPath(req.files.thumbnail[0].path);
       }
-      if (req.files.banner) {
-        courseData.banner = req.files.banner[0].path;
+      if (req.files.banner && req.files.banner[0]) {
+        courseData.banner = toWebPath(req.files.banner[0].path);
       }
-      if (req.files.coursePdf && courseType === 'online') {
-        courseData.onlineCourse.pdfContent = req.files.coursePdf[0].path;
+      if (req.files.coursePdf && req.files.coursePdf[0] && courseType === 'online') {
+        courseData.onlineCourse.pdfContent = toWebPath(req.files.coursePdf[0].path);
       }
     }
 
     const course = new Course(courseData);
     await course.save();
 
+    // Calculate discount percentage if original price is set
+    let discountPercentage = 0;
+    if (course.originalPrice && course.price) {
+      discountPercentage = Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Course created successfully',
-      data: course
+      data: {
+        _id: course._id,
+        title: course.title,
+        description: course.description,
+        courseType: course.courseType,
+        category: course.category,
+        duration: course.duration,
+        level: course.level,
+        price: course.price,
+        originalPrice: course.originalPrice,
+        discountPercentage: discountPercentage,
+        thumbnail: course.thumbnail,
+        banner: course.banner,
+        onlineCourse: course.onlineCourse,
+        totalEnrollments: course.totalEnrollments,
+        averageRating: course.averageRating,
+        totalRatings: course.totalRatings,
+        createdBy: course.createdBy,
+        createdAt: course.createdAt
+      }
     });
   } catch (error) {
     console.error('Create course error:', error);
+    
+    // Handle specific MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationErrors
+      });
+    }
+
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Course with this title already exists'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -673,6 +860,14 @@ router.post('/batches', authenticateAdmin, requirePermission('manage_batches'), 
       originalPrice
     } = req.body;
 
+    // Validate required fields
+    if (!name || !courseId || !startDate || !endDate || !schedule || !maxStudents || !batchPrice) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: name, courseId, startDate, endDate, schedule, maxStudents, batchPrice'
+      });
+    }
+
     // Verify course exists
     const course = await Course.findById(courseId);
     if (!course) {
@@ -682,28 +877,172 @@ router.post('/batches', authenticateAdmin, requirePermission('manage_batches'), 
       });
     }
 
-    const batch = new Batch({
-      name,
-      description,
-      course: courseId,
-      startDate,
-      endDate,
-      schedule: JSON.parse(schedule),
-      maxStudents: parseInt(maxStudents),
-      batchPrice: parseFloat(batchPrice),
-      originalPrice: originalPrice ? parseFloat(originalPrice) : null,
-      createdBy: req.admin._id
-    });
+    // Parse and validate numeric fields
+    const maxStudentsNum = parseInt(maxStudents);
+    const batchPriceNum = parseFloat(batchPrice);
+    const originalPriceNum = originalPrice ? parseFloat(originalPrice) : null;
 
+    if (isNaN(maxStudentsNum) || maxStudentsNum < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Max students must be a positive number'
+      });
+    }
+
+    if (isNaN(batchPriceNum) || batchPriceNum < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch price must be a non-negative number'
+      });
+    }
+
+    if (originalPriceNum !== null && (isNaN(originalPriceNum) || originalPriceNum < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Original price must be a non-negative number'
+      });
+    }
+
+    // Parse schedule JSON with error handling
+    let scheduleData = [];
+    try {
+      scheduleData = JSON.parse(schedule);
+      if (!Array.isArray(scheduleData)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Schedule must be a valid JSON array'
+        });
+      }
+
+      // Validate schedule structure
+      const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+
+      for (let i = 0; i < scheduleData.length; i++) {
+        const item = scheduleData[i];
+        
+        if (!item.day || !validDays.includes(item.day.toLowerCase())) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid day in schedule item ${i + 1}. Must be one of: ${validDays.join(', ')}`
+          });
+        }
+
+        if (!item.startTime || !timeRegex.test(item.startTime)) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid start time in schedule item ${i + 1}. Must be in HH:MM format`
+          });
+        }
+
+        if (!item.endTime || !timeRegex.test(item.endTime)) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid end time in schedule item ${i + 1}. Must be in HH:MM format`
+          });
+        }
+
+        // Normalize day to lowercase
+        item.day = item.day.toLowerCase();
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid schedule JSON format'
+      });
+    }
+
+    // Validate dates
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    const now = new Date();
+
+    if (isNaN(startDateObj.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid start date format'
+      });
+    }
+
+    if (isNaN(endDateObj.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid end date format'
+      });
+    }
+
+    if (startDateObj >= endDateObj) {
+      return res.status(400).json({
+        success: false,
+        message: 'End date must be after start date'
+      });
+    }
+
+    const batchData = {
+      name: name.trim(),
+      description: description ? description.trim() : undefined,
+      course: courseId,
+      startDate: startDateObj,
+      endDate: endDateObj,
+      schedule: scheduleData,
+      maxStudents: maxStudentsNum,
+      batchPrice: batchPriceNum,
+      originalPrice: originalPriceNum,
+      createdBy: req.admin._id
+    };
+
+    const batch = new Batch(batchData);
     await batch.save();
+
+    // Calculate discount percentage if original price is set
+    let discountPercentage = 0;
+    if (batch.originalPrice && batch.batchPrice) {
+      discountPercentage = Math.round(((batch.originalPrice - batch.batchPrice) / batch.originalPrice) * 100);
+    }
 
     res.status(201).json({
       success: true,
       message: 'Batch created successfully',
-      data: batch
+      data: {
+        _id: batch._id,
+        name: batch.name,
+        description: batch.description,
+        course: batch.course,
+        startDate: batch.startDate,
+        endDate: batch.endDate,
+        schedule: batch.schedule,
+        maxStudents: batch.maxStudents,
+        currentStudents: batch.currentStudents,
+        batchPrice: batch.batchPrice,
+        originalPrice: batch.originalPrice,
+        discountPercentage: discountPercentage,
+        status: batch.status,
+        isActive: batch.isActive,
+        createdBy: batch.createdBy,
+        createdAt: batch.createdAt
+      }
     });
   } catch (error) {
     console.error('Create batch error:', error);
+    
+    // Handle specific MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationErrors
+      });
+    }
+
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch with this name already exists for this course'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -951,7 +1290,7 @@ router.post('/certificates', authenticateAdmin, requirePermission('manage_certif
     };
 
     if (req.file) {
-      certificate.certificateUrl = req.file.path;
+      certificate.certificateUrl = toWebPath(req.file.path);
     }
 
     student.certificates.push(certificate);

@@ -95,7 +95,7 @@ Authenticate student and get access token.
 ### 3. Upload KYC Documents
 **POST** `/kyc-upload`
 
-Upload KYC documents (Aadhar, PAN, Profile Photo). This step is required after signup to access courses.
+Upload KYC documents. Aadhar and Profile Photo are required. PAN is optional.
 
 **Headers:**
 ```
@@ -106,9 +106,9 @@ Content-Type: multipart/form-data
 **Request Body:**
 ```
 aadharNumber: "123456789012"
-panNumber: "ABCDE1234F"
+panNumber: "ABCDE1234F" (optional)
 aadharDocument: <file>
-panDocument: <file>
+panDocument: <file> (optional)
 profilePhoto: <file>
 ```
 
@@ -554,7 +554,7 @@ Authorization: Bearer <token>
 ## KYC Process Flow
 
 1. **Signup**: Student registers with basic information (no KYC documents required)
-2. **KYC Upload**: Student uploads required documents (Aadhar, PAN, Profile Photo)
+2. **KYC Upload**: Student uploads required documents (Aadhar + Profile Photo). PAN is optional.
 3. **Admin Review**: Admin reviews the submitted documents
 4. **Approval/Rejection**: Admin approves or rejects the KYC with reason
 5. **Course Access**: Only approved students can access courses and enrollments
@@ -604,9 +604,9 @@ Authorization: Bearer <token>
 ## File Upload Requirements
 
 ### KYC Documents
-- **Aadhar Document**: PDF, JPG, JPEG, PNG (max 10MB)
-- **PAN Document**: PDF, JPG, JPEG, PNG (max 10MB)
-- **Profile Photo**: JPG, JPEG, PNG, WEBP (max 10MB)
+- **Aadhar Document**: PDF, JPG, JPEG, PNG (max 10MB) — required
+- **PAN Document**: PDF, JPG, JPEG, PNG (max 10MB) — optional
+- **Profile Photo**: JPG, JPEG, PNG, WEBP (max 10MB) — required
 
 ### Course Content
 - **Course PDF**: PDF only (max 10MB)

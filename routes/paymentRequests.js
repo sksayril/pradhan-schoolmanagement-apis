@@ -335,7 +335,7 @@ router.get('/member/requests', authenticateSocietyMember, async (req, res) => {
     const { page = 1, limit = 10, status } = req.query;
     const skip = (page - 1) * limit;
 
-    const filter = { societyMember: req.user.id };
+          const filter = { societyMember: req.societyMember._id };
     if (status) filter.status = status;
 
     const paymentRequests = await PaymentRequest.find(filter)
@@ -369,16 +369,9 @@ router.get('/member/requests', authenticateSocietyMember, async (req, res) => {
 // Get society member's payment request by ID
 router.get('/member/requests/:requestId', authenticateSocietyMember, async (req, res) => {
   try {
-    if (req.user.role !== 'societyMember') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Society member privileges required.'
-      });
-    }
-
     const paymentRequest = await PaymentRequest.findOne({
       _id: req.params.requestId,
-      societyMember: req.user.id
+      societyMember: req.societyMember._id
     });
 
     if (!paymentRequest) {
@@ -406,15 +399,8 @@ router.get('/member/requests/:requestId', authenticateSocietyMember, async (req,
 // Get pending payments for society member
 router.get('/member/pending', authenticateSocietyMember, async (req, res) => {
   try {
-    if (req.user.role !== 'societyMember') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Society member privileges required.'
-      });
-    }
-
     const pendingRequests = await PaymentRequest.find({
-      societyMember: req.user.id,
+      societyMember: req.societyMember._id,
       status: 'PENDING'
     }).sort({ dueDate: 1 });
 
@@ -448,7 +434,7 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
 
     const paymentRequest = await PaymentRequest.findOne({
       _id: requestId,
-      societyMember: req.user.id,
+      societyMember: req.societyMember._id,
       status: 'PENDING'
     });
 
@@ -512,7 +498,7 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
 
     const paymentRequest = await PaymentRequest.findOne({
       _id: requestId,
-      societyMember: req.user.id,
+      societyMember: req.societyMember._id,
       status: 'PENDING'
     });
 
@@ -572,7 +558,7 @@ router.post('/process-upi-payment', authenticateSocietyMember, async (req, res) 
 
     const paymentRequest = await PaymentRequest.findOne({
       _id: requestId,
-      societyMember: req.user.id,
+      societyMember: req.societyMember._id,
       status: 'PENDING'
     });
 

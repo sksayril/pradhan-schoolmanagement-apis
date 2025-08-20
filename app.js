@@ -19,8 +19,12 @@ const paymentRequestRouter = require('./routes/paymentRequests');
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware (allow cross-origin resource loads for images/files)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+  })
+);
 
 // CORS configuration
 app.use(cors());

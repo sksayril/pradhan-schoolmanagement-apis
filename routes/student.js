@@ -8,6 +8,14 @@ const { authenticateStudent, requireKycApproved } = require('../middleware/auth'
 const { kycUpload, handleUploadError } = require('../middleware/upload');
 const { createOrder, verifyPayment } = require('../utilities/razorpay');
 
+// Normalize filesystem path to web URL path under /uploads
+function toWebPath(filePath) {
+  if (!filePath) return filePath;
+  const parts = String(filePath).split('uploads');
+  const rel = parts.length > 1 ? parts[1] : '';
+  return ('/uploads' + rel).replace(/\\/g, '/');
+}
+
 // Student Signup
 router.post('/signup', async (req, res) => {
   try {
@@ -141,11 +149,11 @@ router.post('/kyc-upload', authenticateStudent, kycUpload, handleUploadError, as
     const { aadharNumber, panNumber } = req.body;
     const files = req.files;
 
-    // Check if all required files are uploaded
-    if (!files.aadharDocument || !files.panDocument || !files.profilePhoto) {
+    // PAN is optional. Require Aadhar document and profile photo only
+    if (!files?.aadharDocument || !files?.profilePhoto) {
       return res.status(400).json({
         success: false,
-        message: 'All KYC documents are required: Aadhar document, PAN document, and profile photo'
+        message: 'Aadhar document and profile photo are required'
       });
     }
 
@@ -157,11 +165,11 @@ router.post('/kyc-upload', authenticateStudent, kycUpload, handleUploadError, as
       });
     }
 
-    // Validate PAN number format
-    if (!panNumber || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber)) {
+    // PAN is optional. If provided, validate format; otherwise ignore
+    if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber)) {
       return res.status(400).json({
         success: false,
-        message: 'Please enter a valid PAN number (e.g., ABCDE1234F)'
+        message: 'Please enter a valid PAN number (e.g., ABCDE1234F) or leave it empty'
       });
     }
 
@@ -169,13 +177,13 @@ router.post('/kyc-upload', authenticateStudent, kycUpload, handleUploadError, as
     student.kycDocuments = {
       aadharCard: {
         number: aadharNumber,
-        document: files.aadharDocument[0].path
+        document: toWebPath(files.aadharDocument[0].path)
       },
-      panCard: {
-        number: panNumber,
-        document: files.panDocument[0].path
-      },
-      profilePhoto: files.profilePhoto[0].path
+      // Include PAN only if either number or document is provided
+      ...(panNumber || files?.panDocument?.[0]?.path
+        ? { panCard: { number: panNumber || undefined, document: toWebPath(files?.panDocument?.[0]?.path) || undefined } }
+        : {}),
+      profilePhoto: toWebPath(files.profilePhoto[0].path)
     };
 
     // Update KYC status to submitted

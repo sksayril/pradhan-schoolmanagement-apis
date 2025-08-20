@@ -361,9 +361,9 @@ Authorization: Bearer <token>
 ```
 
 ### 8. Approve KYC
-**PUT** `/students/:studentId/approve-kyc`
+**POST** `/students/:studentId/approve-kyc`
 
-Approve student's KYC documents and activate account.
+Approve student's KYC documents and activate account. Requires Aadhar document and profile photo. PAN is optional.
 
 **Headers:**
 ```
@@ -386,7 +386,7 @@ Authorization: Bearer <token>
 ```
 
 ### 9. Reject KYC
-**PUT** `/students/:studentId/reject-kyc`
+**POST** `/students/:studentId/reject-kyc`
 
 Reject student's KYC documents with a reason.
 

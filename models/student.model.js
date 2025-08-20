@@ -199,8 +199,7 @@ const studentSchema = new mongoose.Schema({
     },
     certificateNumber: {
       type: String,
-      required: true,
-      unique: true
+      required: true
     },
     issuedDate: {
       type: Date,
@@ -259,12 +258,21 @@ studentSchema.methods.getFullName = function() {
 };
 
 // Method to check if KYC is complete
+// PAN is optional now. Only Aadhar (number + document) and profile photo are required.
 studentSchema.methods.isKycComplete = function() {
-  return this.kycDocuments.aadharCard.number && 
-         this.kycDocuments.aadharCard.document &&
-         this.kycDocuments.panCard.number && 
-         this.kycDocuments.panCard.document &&
-         this.kycDocuments.profilePhoto;
+  const hasAadhar = Boolean(
+    this.kycDocuments?.aadharCard?.number && this.kycDocuments?.aadharCard?.document
+  );
+  const hasProfile = Boolean(this.kycDocuments?.profilePhoto);
+  return hasAadhar && hasProfile;
 };
+
+// Create a sparse compound index for certificate numbers to ensure uniqueness
+// This will only index documents that have certificates with certificateNumber
+studentSchema.index({ 'certificates.certificateNumber': 1 }, { 
+  unique: true, 
+  sparse: true,
+  partialFilterExpression: { 'certificates.certificateNumber': { $exists: true, $ne: null } }
+});
 
 module.exports = mongoose.model('Student', studentSchema); 
