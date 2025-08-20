@@ -1,6 +1,6 @@
-# Student Management System API
+# Student & Society Management System API
 
-A comprehensive REST API for managing students, courses, batches, KYC verification, and online/offline course enrollments with payment integration.
+A comprehensive REST API for managing students, courses, batches, KYC verification, online/offline course enrollments with payment integration, and society management with agent-based member registration.
 
 ## Features
 
@@ -27,6 +27,25 @@ A comprehensive REST API for managing students, courses, batches, KYC verificati
 - Razorpay integration for online payments
 - Cash payment support for offline courses
 - Payment verification and tracking
+
+### 💰 Payment Request Management System
+- **RD (Recurring Deposit)**: Monthly/weekly/daily contributions with maturity calculation
+- **FD (Fixed Deposit)**: One-time deposits with compound interest
+- **OD (Overdraft)**: Flexible borrowing with EMI calculation
+- **CD (Current Deposit)**: Regular savings with simple interest
+- **Multi-Payment Methods**: UPI, Razorpay, and Cash payments
+- **Interest Rate Management**: Admin-controlled interest rates (hidden from members)
+- **Payment Scheduling**: Automatic maturity date and payment schedule calculation
+- **Late Fee Calculation**: Intelligent late fee calculation for overdue payments
+- **Payment Tracking**: Complete payment status and history tracking
+
+### 🏢 Society Management
+- Society member registration with agent codes
+- KYC verification for members
+- Agent management and performance tracking
+- Member account numbers and referral codes
+- Membership types and contribution tracking
+- Emergency contact management
 
 ### 🔐 Security Features
 - JWT-based authentication
@@ -65,7 +84,7 @@ cp env.example .env
 
 4. Configure environment variables in `.env`:
 ```env
-DATABASE_URL=mongodb://localhost:27017/student_management_system
+MONGODB_URI=mongodb://localhost:27017/student_management_system
 JWT_SECRET=your-super-secret-jwt-key-here
 RAZORPAY_KEY_ID=your-razorpay-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
@@ -74,12 +93,58 @@ NODE_ENV=development
 ALLOWED_ORIGINS=http://localhost:3000
 ```
 
-5. Start the server:
+5. Setup the database with default data:
+```bash
+node setupSociety.js
+```
+
+6. Start the server:
 ```bash
 npm start
 ```
 
+## Testing
+
+Run the test suite:
+```bash
+npm test
+```
+
+## Examples
+
+See the examples directory for usage examples:
+- [Payment Request Examples](examples/payment-examples.js) - Complete payment workflow examples
+- [Test Suite](test/payment-requests.test.js) - Comprehensive test coverage
+
 ## API Documentation
+
+### Payment Request System
+
+The system supports comprehensive payment management with four main payment types:
+
+#### Payment Types
+- **RD (Recurring Deposit)**: Regular contributions with maturity benefits
+- **FD (Fixed Deposit)**: One-time deposits with higher interest rates
+- **OD (Overdraft)**: Flexible borrowing facility
+- **CD (Current Deposit)**: Regular savings account type
+
+#### Payment Methods
+- **UPI**: Direct UPI payments
+- **Razorpay**: Online payment gateway
+- **Cash**: Cash payments with receipt tracking
+
+#### Key Features
+- Admin can set custom interest rates for each member
+- Interest rates are hidden from society members for privacy
+- Automatic calculation of maturity amounts and payment schedules
+- Late fee calculation for overdue payments
+- Complete payment tracking and audit trail
+
+For detailed API documentation, see:
+- [Payment Requests API Documentation](docs/payment-requests-api.md)
+- [Society Management API Documentation](docs/society-api.md)
+- [Student Management API Documentation](docs/student-api.md)
+- [Admin API Documentation](docs/admin-api.md)
 
 ### Authentication
 
@@ -123,6 +188,56 @@ Content-Type: application/json
 
 {
   "email": "admin@example.com",
+  "password": "admin123"
+}
+```
+
+#### Society Member Signup
+```http
+POST /api/society-member/signup
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "dateOfBirth": "1990-01-01",
+  "gender": "male",
+  "address": {
+    "street": "123 Main St",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001"
+  },
+  "password": "password123",
+  "agentCode": "AGENT001",
+  "emergencyContact": {
+    "name": "Jane Doe",
+    "relationship": "Spouse",
+    "phone": "9876543211"
+  }
+}
+```
+
+#### Society Member Login
+```http
+POST /api/society-member/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+```
+
+#### Admin Society Login
+```http
+POST /api/admin-society/login
+Content-Type: application/json
+
+{
+  "email": "admin@society.com",
   "password": "admin123"
 }
 ```
@@ -256,6 +371,84 @@ Content-Type: multipart/form-data
 }
 ```
 
+### Society Management Routes
+
+#### Upload Society Member KYC
+```http
+POST /api/society-member/kyc-upload
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+{
+  "aadharNumber": "123456789012",
+  "panNumber": "ABCDE1234F",
+  "aadharDocument": <file>,
+  "panDocument": <file>,
+  "profilePhoto": <file>
+}
+```
+
+#### Get Society Member Profile
+```http
+GET /api/society-member/profile
+Authorization: Bearer <token>
+```
+
+#### Validate Agent Code
+```http
+POST /api/society-member/validate-agent-code
+Content-Type: application/json
+
+{
+  "agentCode": "AGENT001"
+}
+```
+
+#### Get All Society Members (Admin)
+```http
+GET /api/admin-society/members?page=1&limit=10&status=active&kycStatus=approved
+Authorization: Bearer <admin_token>
+```
+
+#### Approve/Reject KYC (Admin)
+```http
+PUT /api/admin-society/members/:memberId/kyc
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "action": "approve"
+}
+```
+
+#### Create Agent (Admin)
+```http
+POST /api/admin-society/agents
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+
+{
+  "agentCode": "AGENT001",
+  "agentName": "John Agent",
+  "phone": "9876543210",
+  "email": "agent@example.com",
+  "address[street]": "123 Agent St",
+  "address[city]": "Mumbai",
+  "address[state]": "Maharashtra",
+  "address[pincode]": "400001",
+  "commissionRate": "5",
+  "idProof": <file>,
+  "addressProof": <file>,
+  "agentProfilePhoto": <file>
+}
+```
+
+#### Get Dashboard Stats (Admin)
+```http
+GET /api/admin-society/dashboard
+Authorization: Bearer <admin_token>
+```
+
 ## Database Schema
 
 ### Student Model
@@ -265,6 +458,21 @@ Content-Type: multipart/form-data
 - Account status (KYC approved, active)
 - Course enrollments
 - Academic records (marksheets, certificates)
+
+### Society Member Model
+- Basic information and address
+- Member account number (auto-generated)
+- Agent code and referral system
+- KYC documents and verification status
+- Membership types and contribution tracking
+- Emergency contact information
+
+### Agent Model
+- Agent information and contact details
+- Agent code and verification status
+- Performance metrics (referrals, commission)
+- Document management
+- Commission rate and earnings
 
 ### Course Model
 - Course details (title, description, type)
@@ -289,11 +497,15 @@ Content-Type: multipart/form-data
 ```
 ├── models/
 │   ├── student.model.js
+│   ├── societyMember.model.js
+│   ├── agent.model.js
 │   ├── admin.model.js
 │   ├── course.model.js
 │   └── batch.model.js
 ├── routes/
 │   ├── student.js
+│   ├── societyMember.js
+│   ├── adminSociety.js
 │   ├── admin.js
 │   └── index.js
 ├── middleware/
@@ -302,12 +514,18 @@ Content-Type: multipart/form-data
 ├── utilities/
 │   ├── database.js
 │   └── razorpay.js
+├── docs/
+│   ├── admin-api.md
+│   ├── student-api.md
+│   └── society-api.md
 ├── uploads/
 │   ├── kyc/
+│   ├── agents/
 │   ├── courses/
 │   ├── profiles/
 │   ├── certificates/
 │   └── marksheets/
+├── setupSociety.js
 └── app.js
 ```
 
@@ -343,13 +561,33 @@ npm test
 ```
 
 ### Environment Variables
-- `DATABASE_URL` - MongoDB connection string
+- `MONGODB_URI` - MongoDB connection string
 - `JWT_SECRET` - Secret key for JWT tokens
 - `RAZORPAY_KEY_ID` - Razorpay public key
 - `RAZORPAY_KEY_SECRET` - Razorpay secret key
 - `PORT` - Server port (default: 3000)
 - `NODE_ENV` - Environment (development/production)
 - `ALLOWED_ORIGINS` - CORS allowed origins
+
+## Default Credentials
+
+After running `node setupSociety.js`, the following default accounts are created:
+
+### Admin Accounts
+- **Super Admin**: admin@society.com / admin123
+- **Regular Admin**: manager@society.com / manager123
+
+### Agent Codes
+- **AGENT001**: John Agent
+- **AGENT002**: Jane Agent  
+- **AGENT003**: Mike Agent
+
+## API Documentation
+
+Complete API documentation is available in the `docs/` folder:
+- `docs/student-api.md` - Student management APIs
+- `docs/admin-api.md` - Admin management APIs
+- `docs/society-api.md` - Society management APIs
 
 ## Contributing
 

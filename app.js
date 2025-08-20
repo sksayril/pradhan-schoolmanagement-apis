@@ -13,6 +13,9 @@ const rateLimit = require('express-rate-limit');
 const indexRouter = require('./routes/index');
 const studentRouter = require('./routes/student');
 const adminRouter = require('./routes/admin');
+const societyMemberRouter = require('./routes/societyMember');
+const adminSocietyRouter = require('./routes/adminSociety');
+const paymentRequestRouter = require('./routes/paymentRequests');
 
 const app = express();
 
@@ -53,6 +56,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/', indexRouter);
 app.use('/api/student', studentRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/society-member', societyMemberRouter);
+app.use('/api/admin-society', adminSocietyRouter);
+app.use('/api/payment-requests', paymentRequestRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

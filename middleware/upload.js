@@ -9,7 +9,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Create subdirectories
-const subdirs = ['kyc', 'courses', 'profiles', 'certificates', 'marksheets'];
+const subdirs = ['kyc', 'courses', 'profiles', 'certificates', 'marksheets', 'agents'];
 subdirs.forEach(dir => {
   const subdir = path.join(uploadsDir, dir);
   if (!fs.existsSync(subdir)) {
@@ -33,6 +33,8 @@ const storage = multer.diskStorage({
       uploadPath = path.join(uploadsDir, 'certificates');
     } else if (file.fieldname === 'marksheet') {
       uploadPath = path.join(uploadsDir, 'marksheets');
+    } else if (file.fieldname === 'idProof' || file.fieldname === 'addressProof' || file.fieldname === 'agentProfilePhoto') {
+      uploadPath = path.join(uploadsDir, 'agents');
     }
     
     cb(null, uploadPath);
@@ -56,9 +58,9 @@ const fileFilter = (req, file, cb) => {
   let allowedTypes = [];
   
   // Determine allowed types based on field name
-  if (file.fieldname === 'profilePhoto') {
+  if (file.fieldname === 'profilePhoto' || file.fieldname === 'agentProfilePhoto') {
     allowedTypes = allowedImageTypes;
-  } else if (file.fieldname === 'aadharDocument' || file.fieldname === 'panDocument') {
+  } else if (file.fieldname === 'aadharDocument' || file.fieldname === 'panDocument' || file.fieldname === 'idProof' || file.fieldname === 'addressProof') {
     allowedTypes = allowedDocumentTypes;
   } else if (file.fieldname === 'coursePdf') {
     allowedTypes = ['application/pdf'];
@@ -90,6 +92,12 @@ const kycUpload = upload.fields([
   { name: 'aadharDocument', maxCount: 1 },
   { name: 'panDocument', maxCount: 1 },
   { name: 'profilePhoto', maxCount: 1 }
+]);
+
+const agentUpload = upload.fields([
+  { name: 'idProof', maxCount: 1 },
+  { name: 'addressProof', maxCount: 1 },
+  { name: 'agentProfilePhoto', maxCount: 1 }
 ]);
 
 const courseUpload = upload.fields([
@@ -137,6 +145,7 @@ const handleUploadError = (error, req, res, next) => {
 
 module.exports = {
   kycUpload,
+  agentUpload,
   courseUpload,
   certificateUpload,
   marksheetUpload,

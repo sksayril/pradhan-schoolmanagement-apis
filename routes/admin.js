@@ -5,7 +5,7 @@ const Student = require('../models/student.model');
 const Admin = require('../models/admin.model');
 const Course = require('../models/course.model');
 const Batch = require('../models/batch.model');
-const { authenticateAdmin, checkPermission } = require('../middleware/auth');
+const { authenticateAdmin, requirePermission } = require('../middleware/auth');
 const { courseUpload, certificateUpload, marksheetUpload, handleUploadError } = require('../middleware/upload');
 const { createProduct, createPrice } = require('../utilities/razorpay');
 
@@ -153,7 +153,7 @@ router.get('/profile', authenticateAdmin, async (req, res) => {
 });
 
 // Get All Students (with passwords)
-router.get('/students', authenticateAdmin, checkPermission('manage_students'), async (req, res) => {
+router.get('/students', authenticateAdmin, requirePermission('manage_students'), async (req, res) => {
   try {
     const { status, kycStatus, page = 1, limit = 10 } = req.query;
     const filter = {};
@@ -203,7 +203,7 @@ router.get('/students', authenticateAdmin, checkPermission('manage_students'), a
 });
 
 // Get Student Details (with password)
-router.get('/students/:studentId', authenticateAdmin, checkPermission('manage_students'), async (req, res) => {
+router.get('/students/:studentId', authenticateAdmin, requirePermission('manage_students'), async (req, res) => {
   try {
     let student;
     
@@ -250,7 +250,7 @@ router.get('/students/:studentId', authenticateAdmin, checkPermission('manage_st
 });
 
 // Approve KYC
-router.post('/students/:studentId/approve-kyc', authenticateAdmin, checkPermission('manage_kyc'), async (req, res) => {
+router.post('/students/:studentId/approve-kyc', authenticateAdmin, requirePermission('manage_kyc'), async (req, res) => {
   try {
     let student;
     
@@ -323,7 +323,7 @@ router.post('/students/:studentId/approve-kyc', authenticateAdmin, checkPermissi
 });
 
 // Reject KYC
-router.put('/students/:studentId/reject-kyc', authenticateAdmin, checkPermission('manage_kyc'), async (req, res) => {
+router.put('/students/:studentId/reject-kyc', authenticateAdmin, requirePermission('manage_kyc'), async (req, res) => {
   try {
     const { reason } = req.body;
     
@@ -390,7 +390,7 @@ router.put('/students/:studentId/reject-kyc', authenticateAdmin, checkPermission
 });
 
 // Reset Student Password
-router.put('/students/:studentId/reset-password', authenticateAdmin, checkPermission('manage_students'), async (req, res) => {
+router.put('/students/:studentId/reset-password', authenticateAdmin, requirePermission('manage_students'), async (req, res) => {
   try {
     const { newPassword } = req.body;
     
@@ -442,7 +442,7 @@ router.put('/students/:studentId/reset-password', authenticateAdmin, checkPermis
 });
 
 // Get Student Details with Original Password
-router.get('/students/:studentId/with-original-password', authenticateAdmin, checkPermission('manage_students'), async (req, res) => {
+router.get('/students/:studentId/with-original-password', authenticateAdmin, requirePermission('manage_students'), async (req, res) => {
   try {
     let student;
     
@@ -494,7 +494,7 @@ router.get('/students/:studentId/with-original-password', authenticateAdmin, che
 });
 
 // Create Course
-router.post('/courses', authenticateAdmin, checkPermission('manage_courses'), courseUpload, handleUploadError, async (req, res) => {
+router.post('/courses', authenticateAdmin, requirePermission('manage_courses'), courseUpload, handleUploadError, async (req, res) => {
   try {
     const {
       title,
@@ -584,7 +584,7 @@ router.post('/courses', authenticateAdmin, checkPermission('manage_courses'), co
 });
 
 // Get All Courses
-router.get('/courses', authenticateAdmin, checkPermission('manage_courses'), async (req, res) => {
+router.get('/courses', authenticateAdmin, requirePermission('manage_courses'), async (req, res) => {
   try {
     const { status, courseType, category, page = 1, limit = 10 } = req.query;
     const filter = {};
@@ -625,7 +625,7 @@ router.get('/courses', authenticateAdmin, checkPermission('manage_courses'), asy
 });
 
 // Update Course
-router.put('/courses/:courseId', authenticateAdmin, checkPermission('manage_courses'), async (req, res) => {
+router.put('/courses/:courseId', authenticateAdmin, requirePermission('manage_courses'), async (req, res) => {
   try {
     const course = await Course.findById(req.params.courseId);
     if (!course) {
@@ -659,7 +659,7 @@ router.put('/courses/:courseId', authenticateAdmin, checkPermission('manage_cour
 });
 
 // Create Batch
-router.post('/batches', authenticateAdmin, checkPermission('manage_batches'), async (req, res) => {
+router.post('/batches', authenticateAdmin, requirePermission('manage_batches'), async (req, res) => {
   try {
     const {
       name,
@@ -712,7 +712,7 @@ router.post('/batches', authenticateAdmin, checkPermission('manage_batches'), as
 });
 
 // Get All Batches
-router.get('/batches', authenticateAdmin, checkPermission('manage_batches'), async (req, res) => {
+router.get('/batches', authenticateAdmin, requirePermission('manage_batches'), async (req, res) => {
   try {
     const { status, courseId, page = 1, limit = 10 } = req.query;
     const filter = {};
@@ -753,7 +753,7 @@ router.get('/batches', authenticateAdmin, checkPermission('manage_batches'), asy
 });
 
 // Enroll Student in Offline Course/Batch
-router.post('/enroll-student', authenticateAdmin, checkPermission('manage_students'), async (req, res) => {
+router.post('/enroll-student', authenticateAdmin, requirePermission('manage_students'), async (req, res) => {
   try {
     const { studentId, courseId, batchId, paymentAmount, paymentMethod } = req.body;
 
@@ -848,7 +848,7 @@ router.post('/enroll-student', authenticateAdmin, checkPermission('manage_studen
 });
 
 // Create Marksheet
-router.post('/marksheets', authenticateAdmin, checkPermission('manage_marksheets'), async (req, res) => {
+router.post('/marksheets', authenticateAdmin, requirePermission('manage_marksheets'), async (req, res) => {
   try {
     const { studentId, courseId, marks, grade } = req.body;
 
@@ -909,7 +909,7 @@ router.post('/marksheets', authenticateAdmin, checkPermission('manage_marksheets
 });
 
 // Create Certificate
-router.post('/certificates', authenticateAdmin, checkPermission('manage_certificates'), certificateUpload, handleUploadError, async (req, res) => {
+router.post('/certificates', authenticateAdmin, requirePermission('manage_certificates'), certificateUpload, handleUploadError, async (req, res) => {
   try {
     const { studentId, courseId } = req.body;
 
