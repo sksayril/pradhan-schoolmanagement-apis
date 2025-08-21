@@ -6,6 +6,16 @@ const Admin = require('../models/admin.model');
 const { createOrder, verifyPayment } = require('../utilities/razorpay');
 const { authenticateAdmin, authenticateSocietyMember } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
+
+// Health check route
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Payment Requests API is working',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Validation middleware
 const validatePaymentRequest = [
@@ -18,19 +28,12 @@ const validatePaymentRequest = [
   body('description').optional().isLength({ max: 500 }).withMessage('Description cannot exceed 500 characters')
 ];
 
-const validateRDRequest = [
-  ...validatePaymentRequest,
-  body('duration').isInt({ min: 1, max: 120 }).withMessage('Duration must be between 1 and 120 months'),
-  body('recurringDetails.frequency').isIn(['MONTHLY', 'WEEKLY', 'DAILY']).withMessage('Frequency must be MONTHLY, WEEKLY, or DAILY'),
-  body('recurringDetails.totalInstallments').isInt({ min: 1 }).withMessage('Total installments must be at least 1')
-];
-
 // ==================== ADMIN ROUTES ====================
 
 // Create payment request (Admin only)
-router.post('/admin/create', authenticateAdmin, async (req, res) => {
+router.post('/admin/create', authenticateAdmin, validatePaymentRequest, async (req, res) => {
   try {
-
+    // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -51,6 +54,14 @@ router.post('/admin/create', authenticateAdmin, async (req, res) => {
       recurringDetails
     } = req.body;
 
+    // Validate that all required fields are present
+    if (!amount || !interestRate || !paymentMethod || !dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: amount, interestRate, paymentMethod, dueDate'
+      });
+    }
+
     // Validate society member exists
     const societyMember = await SocietyMember.findById(societyMemberId);
     if (!societyMember) {
@@ -60,37 +71,86 @@ router.post('/admin/create', authenticateAdmin, async (req, res) => {
       });
     }
 
-    // Validate payment type specific requirements
-    if (['RD', 'FD'].includes(paymentType) && !duration) {
-      return res.status(400).json({
-        success: false,
-        message: 'Duration is required for RD and FD payments'
-      });
+    // Additional validation for RD/FD payments
+    if (['RD', 'FD'].includes(paymentType)) {
+      if (!duration || duration < 1 || duration > 120) {
+        return res.status(400).json({
+          success: false,
+          message: 'Duration must be between 1 and 120 months for RD and FD payments'
+        });
+      }
     }
 
-    if (paymentType === 'RD' && (!recurringDetails || !recurringDetails.totalInstallments)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Recurring details with total installments are required for RD payments'
-      });
+    // Additional validation for RD payments
+    if (paymentType === 'RD') {
+      if (!recurringDetails || !recurringDetails.totalInstallments || recurringDetails.totalInstallments < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Recurring details with total installments are required for RD payments'
+        });
+      }
+      
+      if (!['MONTHLY', 'WEEKLY', 'DAILY'].includes(recurringDetails.frequency)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Frequency must be MONTHLY, WEEKLY, or DAILY for RD payments'
+        });
+      }
     }
 
-    // Create payment request
+    // Create payment request data with proper defaults
     const paymentRequestData = {
       societyMember: societyMemberId,
       createdBy: req.admin._id,
       paymentType,
-      amount,
-      interestRate,
+      amount: parseFloat(amount),
+      interestRate: parseFloat(interestRate),
       paymentMethod,
       dueDate: new Date(dueDate),
-      description,
-      duration: ['RD', 'FD'].includes(paymentType) ? duration : undefined,
-      recurringDetails: paymentType === 'RD' ? recurringDetails : undefined
+      description: description || '',
+      lateFee: 0, // Initialize lateFee
+      totalAmount: parseFloat(amount), // Will be calculated in pre-save
+      status: 'PENDING'
     };
 
+    // Add duration for RD/FD payments
+    if (['RD', 'FD'].includes(paymentType)) {
+      paymentRequestData.duration = parseInt(duration);
+      
+      // For RD/FD, set a default maturity date (will be recalculated in pre-save)
+      const defaultMaturityDate = new Date();
+      defaultMaturityDate.setMonth(defaultMaturityDate.getMonth() + (parseInt(duration) || 12));
+      paymentRequestData.maturityDate = defaultMaturityDate;
+    }
+
+    // Add recurring details for RD payments
+    if (paymentType === 'RD' && recurringDetails) {
+      paymentRequestData.recurringDetails = {
+        frequency: recurringDetails.frequency || 'MONTHLY',
+        totalInstallments: parseInt(recurringDetails.totalInstallments),
+        installmentsPaid: 0,
+        nextDueDate: null // Will be set in pre-save middleware
+      };
+    }
+
     const paymentRequest = new PaymentRequest(paymentRequestData);
+    
+    // Log the data being saved for debugging
+    console.log('Creating payment request with data:', JSON.stringify(paymentRequestData, null, 2));
+    console.log('Payment request object before save:', {
+      paymentType: paymentRequest.paymentType,
+      duration: paymentRequest.duration,
+      maturityDate: paymentRequest.maturityDate,
+      totalAmount: paymentRequest.totalAmount,
+      requestId: paymentRequest.requestId
+    });
+    
     await paymentRequest.save();
+    
+    // Log the saved payment request for debugging
+    console.log('Payment request created successfully:', paymentRequest.requestId);
+    console.log('After save - maturityDate:', paymentRequest.maturityDate);
+    console.log('After save - totalAmount:', paymentRequest.totalAmount);
 
     res.status(201).json({
       success: true,
@@ -100,6 +160,29 @@ router.post('/admin/create', authenticateAdmin, async (req, res) => {
 
   } catch (error) {
     console.error('Create payment request error:', error);
+    
+    // Handle validation errors specifically
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors
+      });
+    }
+    
+    // Handle other specific errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate payment request'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -154,11 +237,23 @@ router.get('/admin/requests', authenticateAdmin, async (req, res) => {
 // Get payment request by ID (Admin)
 router.get('/admin/requests/:requestId', authenticateAdmin, async (req, res) => {
   try {
-
-    const paymentRequest = await PaymentRequest.findById(req.params.requestId)
-      .populate('societyMember', 'firstName lastName email phone memberAccountNumber')
-      .populate('createdBy', 'firstName lastName email')
-      .populate('paymentDetails.receivedBy', 'firstName lastName');
+    const { requestId } = req.params;
+    
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findById(requestId)
+        .populate('societyMember', 'firstName lastName email phone memberAccountNumber')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('paymentDetails.receivedBy', 'firstName lastName');
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({ requestId: requestId })
+        .populate('societyMember', 'firstName lastName email phone memberAccountNumber')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('paymentDetails.receivedBy', 'firstName lastName');
+    }
 
     if (!paymentRequest) {
       return res.status(404).json({
@@ -185,10 +280,19 @@ router.get('/admin/requests/:requestId', authenticateAdmin, async (req, res) => 
 // Update payment request (Admin)
 router.put('/admin/requests/:requestId', authenticateAdmin, async (req, res) => {
   try {
-
+    const { requestId } = req.params;
     const { amount, interestRate, dueDate, description, status } = req.body;
 
-    const paymentRequest = await PaymentRequest.findById(req.params.requestId);
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findById(requestId);
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({ requestId: requestId });
+    }
+
     if (!paymentRequest) {
       return res.status(404).json({
         success: false,
@@ -231,10 +335,19 @@ router.put('/admin/requests/:requestId', authenticateAdmin, async (req, res) => 
 // Mark payment as received (Admin)
 router.post('/admin/requests/:requestId/mark-paid', authenticateAdmin, async (req, res) => {
   try {
-
+    const { requestId } = req.params;
     const { paymentMethod, transactionId, cashReceiptNumber } = req.body;
 
-    const paymentRequest = await PaymentRequest.findById(req.params.requestId);
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findById(requestId);
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({ requestId: requestId });
+    }
+
     if (!paymentRequest) {
       return res.status(404).json({
         success: false,
@@ -369,10 +482,23 @@ router.get('/member/requests', authenticateSocietyMember, async (req, res) => {
 // Get society member's payment request by ID
 router.get('/member/requests/:requestId', authenticateSocietyMember, async (req, res) => {
   try {
-    const paymentRequest = await PaymentRequest.findOne({
-      _id: req.params.requestId,
-      societyMember: req.societyMember._id
-    });
+    const { requestId } = req.params;
+    
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findOne({
+        _id: requestId,
+        societyMember: req.societyMember._id
+      });
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({
+        requestId: requestId,
+        societyMember: req.societyMember._id
+      });
+    }
 
     if (!paymentRequest) {
       return res.status(404).json({
@@ -432,11 +558,23 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
   try {
     const { requestId } = req.body;
 
-    const paymentRequest = await PaymentRequest.findOne({
-      _id: requestId,
-      societyMember: req.societyMember._id,
-      status: 'PENDING'
-    });
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findOne({
+        _id: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({
+        requestId: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    }
 
     if (!paymentRequest) {
       return res.status(404).json({
@@ -496,11 +634,23 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
   try {
     const { requestId, paymentId, signature } = req.body;
 
-    const paymentRequest = await PaymentRequest.findOne({
-      _id: requestId,
-      societyMember: req.societyMember._id,
-      status: 'PENDING'
-    });
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findOne({
+        _id: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({
+        requestId: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    }
 
     if (!paymentRequest) {
       return res.status(404).json({
@@ -556,11 +706,23 @@ router.post('/process-upi-payment', authenticateSocietyMember, async (req, res) 
   try {
     const { requestId, upiTransactionId } = req.body;
 
-    const paymentRequest = await PaymentRequest.findOne({
-      _id: requestId,
-      societyMember: req.societyMember._id,
-      status: 'PENDING'
-    });
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findOne({
+        _id: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({
+        requestId: requestId,
+        societyMember: req.societyMember._id,
+        status: 'PENDING'
+      });
+    }
 
     if (!paymentRequest) {
       return res.status(404).json({

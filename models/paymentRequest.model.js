@@ -6,7 +6,7 @@ const paymentRequestSchema = new mongoose.Schema({
   requestId: {
     type: String,
     unique: true,
-    required: true
+    sparse: true
   },
   
   // Society Member Information
@@ -57,10 +57,7 @@ const paymentRequestSchema = new mongoose.Schema({
   
   // Maturity Date (calculated based on duration)
   maturityDate: {
-    type: Date,
-    required: function() {
-      return ['RD', 'FD'].includes(this.paymentType);
-    }
+    type: Date
   },
   
   // Payment Method
@@ -113,7 +110,7 @@ const paymentRequestSchema = new mongoose.Schema({
   // Total Amount (including late fee)
   totalAmount: {
     type: Number,
-    required: true
+    default: 0
   },
   
   // Recurring Payment Details (for RD)
@@ -152,37 +149,69 @@ const paymentRequestSchema = new mongoose.Schema({
 
 // Generate request ID before saving
 paymentRequestSchema.pre('save', function(next) {
-  if (this.isNew && !this.requestId) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const timestamp = Date.now().toString().slice(-6);
-    this.requestId = `PR${year}${month}${timestamp}`;
-  }
-  
-  // Calculate maturity date for RD/FD
-  if (this.isNew && ['RD', 'FD'].includes(this.paymentType) && this.duration) {
-    const maturityDate = new Date();
-    maturityDate.setMonth(maturityDate.getMonth() + this.duration);
-    this.maturityDate = maturityDate;
-  }
-  
-  // Calculate total amount
-  this.totalAmount = this.amount + this.lateFee;
-  
-  // Set next due date for RD
-  if (this.isNew && this.paymentType === 'RD') {
-    const nextDue = new Date();
-    if (this.recurringDetails.frequency === 'WEEKLY') {
-      nextDue.setDate(nextDue.getDate() + 7);
-    } else if (this.recurringDetails.frequency === 'DAILY') {
-      nextDue.setDate(nextDue.getDate() + 1);
-    } else {
-      nextDue.setMonth(nextDue.getMonth() + 1);
+  try {
+    // Generate request ID before saving
+    if (this.isNew && !this.requestId) {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      const timestamp = Date.now().toString().slice(-6);
+      this.requestId = `PR${year}${month}${timestamp}`;
     }
-    this.recurringDetails.nextDueDate = nextDue;
+    
+    // Calculate maturity date for RD/FD
+    if (['RD', 'FD'].includes(this.paymentType) && this.duration) {
+      const maturityDate = new Date();
+      maturityDate.setMonth(maturityDate.getMonth() + this.duration);
+      this.maturityDate = maturityDate;
+    }
+    
+    // Ensure lateFee is initialized
+    if (this.lateFee === undefined) {
+      this.lateFee = 0;
+    }
+    
+    // Calculate total amount (amount + lateFee)
+    this.totalAmount = (this.amount || 0) + (this.lateFee || 0);
+    
+    // Set next due date for RD
+    if (this.isNew && this.paymentType === 'RD' && this.recurringDetails) {
+      const nextDue = new Date();
+      if (this.recurringDetails.frequency === 'WEEKLY') {
+        nextDue.setDate(nextDue.getDate() + 7);
+      } else if (this.recurringDetails.frequency === 'DAILY') {
+        nextDue.setDate(nextDue.getDate() + 1);
+      } else {
+        nextDue.setMonth(nextDue.getMonth() + 1);
+      }
+      this.recurringDetails.nextDueDate = nextDue;
+    }
+    
+    // Ensure all required fields are set before validation
+    if (this.isNew) {
+      // Set default values for required fields that might be undefined
+      if (!this.status) this.status = 'PENDING';
+      if (!this.lateFee) this.lateFee = 0;
+      if (!this.totalAmount) this.totalAmount = this.amount || 0;
+      
+      // For RD/FD, ensure maturityDate is set even if duration is missing
+      if (['RD', 'FD'].includes(this.paymentType)) {
+        if (!this.maturityDate && this.duration) {
+          const maturityDate = new Date();
+          maturityDate.setMonth(maturityDate.getMonth() + this.duration);
+          this.maturityDate = maturityDate;
+        } else if (!this.maturityDate) {
+          // Set a default maturity date if duration is missing
+          const maturityDate = new Date();
+          maturityDate.setMonth(maturityDate.getMonth() + 12); // Default to 12 months
+          this.maturityDate = maturityDate;
+        }
+      }
+    }
+    
+    next();
+  } catch (error) {
+    next(error);
   }
-  
-  next();
 });
 
 // Method to check if payment is overdue

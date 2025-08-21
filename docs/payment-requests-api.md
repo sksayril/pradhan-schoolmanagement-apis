@@ -17,6 +17,24 @@ Authorization: Bearer <jwt_token>
 
 ---
 
+## Health Check
+
+### 1. API Health Check
+**GET** `/health`
+
+Checks if the Payment Requests API is working.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Payment Requests API is working",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+---
+
 ## Admin Routes
 
 ### 1. Create Payment Request
@@ -53,6 +71,19 @@ Creates a new payment request for a society member.
 - `RAZORPAY` - Online payment via Razorpay
 - `CASH` - Cash payment
 
+**Validation Rules:**
+- `societyMemberId`: Must be a valid MongoDB ObjectId
+- `paymentType`: Must be one of RD, FD, OD, or CD
+- `amount`: Must be at least 1
+- `interestRate`: Must be between 0 and 100
+- `paymentMethod`: Must be UPI, RAZORPAY, or CASH
+- `dueDate`: Must be a valid ISO 8601 date
+- `description`: Optional, max 500 characters
+- `duration`: Required for RD/FD, must be between 1-120 months
+- `recurringDetails`: Required for RD payments
+  - `frequency`: Must be MONTHLY, WEEKLY, or DAILY
+  - `totalInstallments`: Must be at least 1
+
 **Response:**
 ```json
 {
@@ -72,10 +103,12 @@ Creates a new payment request for a society member.
     "duration": 12,
     "recurringDetails": {
       "frequency": "MONTHLY",
-      "nextDueDate": "2024-03-15T00:00:00.000Z",
+      "nextDueDate": "2024-02-15T00:00:00.000Z",
       "installmentsPaid": 0,
       "totalInstallments": 12
-    }
+    },
+    "societyMember": "507f1f77bcf86cd799439011",
+    "createdBy": "507f1f77bcf86cd799439012"
   }
 }
 ```
@@ -107,6 +140,14 @@ Retrieves all payment requests with pagination and filtering.
       "status": "PENDING",
       "paymentMethod": "RAZORPAY",
       "description": "Monthly RD contribution",
+      "maturityDate": "2025-01-15T00:00:00.000Z",
+      "duration": 12,
+      "recurringDetails": {
+        "frequency": "MONTHLY",
+        "nextDueDate": "2024-02-15T00:00:00.000Z",
+        "installmentsPaid": 0,
+        "totalInstallments": 12
+      },
       "societyMember": {
         "firstName": "John",
         "lastName": "Doe",
@@ -149,6 +190,14 @@ Retrieves a specific payment request by ID.
     "status": "PENDING",
     "paymentMethod": "RAZORPAY",
     "description": "Monthly RD contribution",
+    "maturityDate": "2025-01-15T00:00:00.000Z",
+    "duration": 12,
+    "recurringDetails": {
+      "frequency": "MONTHLY",
+      "nextDueDate": "2024-02-15T00:00:00.000Z",
+      "installmentsPaid": 0,
+      "totalInstallments": 12
+    },
     "paymentDetails": {
       "transactionId": null,
       "paymentDate": null,
@@ -177,7 +226,7 @@ Retrieves a specific payment request by ID.
 ### 4. Update Payment Request
 **PUT** `/admin/requests/:requestId`
 
-Updates an existing payment request.
+Updates an existing payment request. Only allows updates if payment is not completed.
 
 **Request Body:**
 ```json
@@ -204,7 +253,17 @@ Updates an existing payment request.
     "dueDate": "2024-02-20T00:00:00.000Z",
     "status": "PENDING",
     "paymentMethod": "RAZORPAY",
-    "description": "Updated monthly RD contribution"
+    "description": "Updated monthly RD contribution",
+    "maturityDate": "2025-01-15T00:00:00.000Z",
+    "duration": 12,
+    "recurringDetails": {
+      "frequency": "MONTHLY",
+      "nextDueDate": "2024-02-15T00:00:00.000Z",
+      "installmentsPaid": 0,
+      "totalInstallments": 12
+    },
+    "societyMember": "507f1f77bcf86cd799439011",
+    "createdBy": "507f1f77bcf86cd799439012"
   }
 }
 ```
@@ -230,14 +289,30 @@ Marks a payment request as paid and records payment details.
   "message": "Payment marked as received successfully",
   "data": {
     "requestId": "PR202412001234",
+    "paymentType": "RD",
+    "amount": 5000,
+    "interestRate": 8.5,
+    "totalAmount": 5000,
+    "dueDate": "2024-02-15T00:00:00.000Z",
     "status": "PAID",
-    "paidAt": "2024-02-15T10:30:00.000Z",
+    "paymentMethod": "CASH",
+    "description": "Monthly RD contribution",
+    "maturityDate": "2025-01-15T00:00:00.000Z",
+    "duration": 12,
+    "recurringDetails": {
+      "frequency": "MONTHLY",
+      "nextDueDate": "2024-02-15T00:00:00.000Z",
+      "installmentsPaid": 0,
+      "totalInstallments": 12
+    },
     "paymentDetails": {
       "transactionId": "TXN123456789",
       "paymentDate": "2024-02-15T10:30:00.000Z",
       "receivedBy": "507f1f77bcf86cd799439012",
       "cashReceiptNumber": "CR001"
-    }
+    },
+    "societyMember": "507f1f77bcf86cd799439011",
+    "createdBy": "507f1f77bcf86cd799439012"
   }
 }
 ```
@@ -386,7 +461,17 @@ Retrieves all pending payment requests for the authenticated member.
         "dueDate": "2024-02-15T00:00:00.000Z",
         "status": "PENDING",
         "paymentMethod": "RAZORPAY",
-        "description": "Monthly RD contribution"
+        "description": "Monthly RD contribution",
+        "isOverdue": false,
+        "lateFee": 0,
+        "maturityDate": "2025-01-15T00:00:00.000Z",
+        "duration": 12,
+        "recurringDetails": {
+          "frequency": "MONTHLY",
+          "nextDueDate": "2024-03-15T00:00:00.000Z",
+          "installmentsPaid": 0,
+          "totalInstallments": 12
+        }
       }
     ],
     "totalPendingAmount": 15000,
@@ -445,8 +530,23 @@ Verifies and processes Razorpay payment.
   "message": "Payment verified and processed successfully",
   "data": {
     "requestId": "PR202412001234",
+    "paymentType": "RD",
+    "amount": 5000,
+    "totalAmount": 5000,
+    "dueDate": "2024-02-15T00:00:00.000Z",
     "status": "PAID",
-    "paidAt": "2024-02-15T10:30:00.000Z"
+    "paymentMethod": "RAZORPAY",
+    "description": "Monthly RD contribution",
+    "isOverdue": false,
+    "lateFee": 0,
+    "maturityDate": "2025-01-15T00:00:00.000Z",
+    "duration": 12,
+    "recurringDetails": {
+      "frequency": "MONTHLY",
+      "nextDueDate": "2024-03-15T00:00:00.000Z",
+      "installmentsPaid": 0,
+      "totalInstallments": 12
+    }
   }
 }
 ```
@@ -471,8 +571,23 @@ Processes UPI payment.
   "message": "UPI payment processed successfully",
   "data": {
     "requestId": "PR202412001234",
+    "paymentType": "RD",
+    "amount": 5000,
+    "totalAmount": 5000,
+    "dueDate": "2024-02-15T00:00:00.000Z",
     "status": "PAID",
-    "paidAt": "2024-02-15T10:30:00.000Z"
+    "paymentMethod": "UPI",
+    "description": "Monthly RD contribution",
+    "isOverdue": false,
+    "lateFee": 0,
+    "maturityDate": "2025-01-15T00:00:00.000Z",
+    "duration": 12,
+    "recurringDetails": {
+      "frequency": "MONTHLY",
+      "nextDueDate": "2024-03-15T00:00:00.000Z",
+      "installmentsPaid": 0,
+      "totalInstallments": 12
+    }
   }
 }
 ```
@@ -485,6 +600,7 @@ Processes UPI payment.
 ```json
 {
   "success": false,
+  "message": "Validation failed",
   "errors": [
     {
       "field": "amount",
@@ -528,12 +644,14 @@ Processes UPI payment.
 - Has maturity date and interest calculation
 - Supports monthly, weekly, or daily frequency
 - Tracks installments paid vs total installments
+- Requires `duration` and `recurringDetails`
 
 ### FD (Fixed Deposit)
 - One-time deposit with fixed duration
 - Higher interest rates than RD
 - Maturity date calculated based on duration
 - No recurring payments
+- Requires `duration`
 
 ### OD (Overdraft)
 - Flexible borrowing facility
@@ -549,14 +667,26 @@ Processes UPI payment.
 
 ---
 
+## Auto-Generated Fields
+
+The following fields are automatically generated by the system:
+
+- **`requestId`**: Auto-generated in format `PR{YYYY}{MM}{TIMESTAMP}`
+- **`maturityDate`**: Calculated for RD/FD based on duration
+- **`totalAmount`**: Calculated as `amount + lateFee`
+- **`nextDueDate`**: Set for RD payments based on frequency
+- **`lateFee`**: Calculated automatically for overdue payments
+
+---
+
 ## Security Features
 
 1. **Role-based Access Control**: Admin and society member routes are properly segregated
 2. **JWT Authentication**: All endpoints require valid authentication
-3. **Input Validation**: Comprehensive validation for all inputs
+3. **Input Validation**: Comprehensive validation for all inputs using express-validator
 4. **Payment Verification**: Razorpay signature verification for online payments
 5. **Audit Trail**: All payment activities are logged with timestamps
-6. **Interest Rate Privacy**: Interest rates are hidden from society members
+6. **Interest Rate Privacy**: Interest rates are hidden from society members in member views
 
 ---
 
@@ -576,3 +706,23 @@ RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 JWT_SECRET=your_jwt_secret
 MONGODB_URI=your_mongodb_connection_string
 ```
+
+---
+
+## Database Indexes
+
+The following indexes are created for optimal performance:
+
+- `{ societyMember: 1, status: 1 }` - For member-specific queries
+- `{ status: 1, dueDate: 1 }` - For status and due date filtering
+- `{ requestId: 1 }` - For request ID lookups
+
+---
+
+## Notes
+
+- All timestamps are in ISO 8601 format
+- Amounts are stored as numbers (not strings)
+- Interest rates are stored as percentages (e.g., 8.5 for 8.5%)
+- Duration is stored in months for RD/FD payments
+- The system automatically handles late fee calculations for overdue payments
