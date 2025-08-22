@@ -91,6 +91,14 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
     // Find student by email
     const student = await Student.findOne({ email });
     if (!student) {

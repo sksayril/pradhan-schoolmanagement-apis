@@ -10,10 +10,22 @@ const mongoose = require('mongoose');
 
 // Health check route
 router.get('/health', (req, res) => {
+  // Check Razorpay configuration
+  const razorpayConfig = {
+    hasKeyId: !!process.env.RAZORPAY_KEY_ID,
+    hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
+    usingDummyKeys: !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET
+  };
+
   res.json({
     success: true,
     message: 'Payment Requests API is working',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    razorpay: {
+      configured: razorpayConfig.hasKeyId && razorpayConfig.hasKeySecret,
+      status: razorpayConfig.usingDummyKeys ? 'Using dummy keys (development mode)' : 'Properly configured',
+      ...razorpayConfig
+    }
   });
 });
 
@@ -558,6 +570,10 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
   try {
     const { requestId } = req.body;
 
+    // Add debugging to see what's being received
+    console.log('🔍 Creating Razorpay order for requestId:', requestId);
+    console.log('🔍 Request body:', req.body);
+
     let paymentRequest;
     
     // Check if it's a valid MongoDB ObjectId
@@ -577,11 +593,19 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
     }
 
     if (!paymentRequest) {
+      console.log('❌ Payment request not found for requestId:', requestId);
       return res.status(404).json({
         success: false,
         message: 'Payment request not found or not eligible for payment'
       });
     }
+
+    console.log('✅ Found payment request:', {
+      requestId: paymentRequest.requestId,
+      amount: paymentRequest.totalAmount,
+      paymentMethod: paymentRequest.paymentMethod,
+      status: paymentRequest.status
+    });
 
     if (paymentRequest.paymentMethod !== 'RAZORPAY') {
       return res.status(400).json({
@@ -598,16 +622,24 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
     );
 
     if (!orderResult.success) {
+      console.error('❌ Failed to create Razorpay order:', orderResult.error);
       return res.status(500).json({
         success: false,
         message: 'Failed to create payment order',
-        error: orderResult.error
+        error: orderResult.error,
+        details: orderResult.details
       });
     }
 
     // Update payment request with order ID
+    paymentRequest.paymentDetails = paymentRequest.paymentDetails || {};
     paymentRequest.paymentDetails.razorpayOrderId = orderResult.order.id;
     await paymentRequest.save();
+
+    console.log('✅ Razorpay order created successfully:', {
+      orderId: orderResult.order.id,
+      isMock: orderResult.isMock || false
+    });
 
     res.json({
       success: true,
@@ -615,12 +647,13 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
         orderId: orderResult.order.id,
         amount: paymentRequest.totalAmount,
         currency: 'INR',
-        requestId: paymentRequest.requestId
+        requestId: paymentRequest.requestId,
+        isMock: orderResult.isMock || false
       }
     });
 
   } catch (error) {
-    console.error('Create Razorpay order error:', error);
+    console.error('❌ Create Razorpay order error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -633,6 +666,8 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
 router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, res) => {
   try {
     const { requestId, paymentId, signature } = req.body;
+
+    console.log('🔍 Verifying Razorpay payment for requestId:', requestId);
 
     let paymentRequest;
     
@@ -659,7 +694,32 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
       });
     }
 
-    // Verify payment signature
+    // Check if this is a mock order (for development/testing)
+    const isMockOrder = paymentRequest.paymentDetails?.razorpayOrderId?.includes('_mock');
+    
+    if (isMockOrder) {
+      console.log('📝 Processing mock payment for development');
+      
+      // For mock orders, skip signature verification
+      paymentRequest.status = 'PAID';
+      paymentRequest.paidAt = new Date();
+      paymentRequest.paymentDetails = {
+        ...paymentRequest.paymentDetails,
+        razorpayPaymentId: paymentId || `mock_payment_${Date.now()}`,
+        paymentDate: new Date(),
+        isMock: true
+      };
+
+      await paymentRequest.save();
+
+      return res.json({
+        success: true,
+        message: 'Mock payment processed successfully (development mode)',
+        data: paymentRequest.getPaymentSummary()
+      });
+    }
+
+    // Verify payment signature for real orders
     const verificationResult = verifyPayment(
       paymentRequest.paymentDetails.razorpayOrderId,
       paymentId,

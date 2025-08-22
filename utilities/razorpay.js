@@ -1,14 +1,48 @@
 const Razorpay = require('razorpay');
 
-// Initialize Razorpay instance
+// Initialize Razorpay instance with fallback dummy keys for development
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
+  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummy_key_id_12345',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummy_razorpay_secret_key_67890'
 });
+
+// Validate Razorpay configuration
+const validateRazorpayConfig = () => {
+  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_dummy_key_id_12345';
+  const keySecret = process.env.RAZORPAY_KEY_SECRET || 'dummy_razorpay_secret_key_67890';
+  
+  // Check if using dummy keys
+  if (keyId === 'rzp_test_dummy_key_id_12345' || keySecret === 'dummy_razorpay_secret_key_67890') {
+    console.warn('⚠️  Using dummy Razorpay keys. Please set proper RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in your environment variables.');
+    return false;
+  }
+  
+  return true;
+};
 
 // Create order for online course payment
 const createOrder = async (amount, currency = 'INR', receipt = null) => {
   try {
+    // Check if using dummy keys
+    if (!validateRazorpayConfig()) {
+      // Return a mock order for development/testing
+      const mockOrder = {
+        id: `order_${Date.now()}_mock`,
+        amount: amount * 100,
+        currency: currency,
+        receipt: receipt || `receipt_${Date.now()}`,
+        status: 'created',
+        created_at: Date.now()
+      };
+      
+      console.log('📝 Using mock Razorpay order for development');
+      return {
+        success: true,
+        order: mockOrder,
+        isMock: true
+      };
+    }
+
     const options = {
       amount: amount * 100, // Razorpay expects amount in paise
       currency: currency,
@@ -19,10 +53,21 @@ const createOrder = async (amount, currency = 'INR', receipt = null) => {
     const order = await razorpay.orders.create(options);
     return {
       success: true,
-      order: order
+      order: order,
+      isMock: false
     };
   } catch (error) {
     console.error('Razorpay order creation error:', error);
+    
+    // If it's an authentication error, provide helpful message
+    if (error.statusCode === 401) {
+      return {
+        success: false,
+        error: 'Razorpay authentication failed. Please check your API keys.',
+        details: error.error?.description || error.message
+      };
+    }
+    
     return {
       success: false,
       error: error.message

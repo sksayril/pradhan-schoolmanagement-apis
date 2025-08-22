@@ -109,6 +109,14 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
     // Find member by email
     const member = await SocietyMember.findOne({ email });
     if (!member) {
@@ -433,6 +441,22 @@ router.put('/change-password', authenticateSocietyMember, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const member = req.societyMember;
+
+    // Validate required fields
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both currentPassword and newPassword are required'
+      });
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
 
     // Verify current password
     const isCurrentPasswordValid = await member.comparePassword(currentPassword);

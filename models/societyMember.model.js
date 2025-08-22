@@ -228,7 +228,17 @@ societyMemberSchema.pre('save', async function(next) {
 
 // Method to compare password
 societyMemberSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  // Safety check for undefined/null candidate password
+  if (!candidatePassword || !this.password) {
+    return false;
+  }
+  
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    console.error('Password comparison error:', error);
+    return false;
+  }
 };
 
 // Method to get full name
