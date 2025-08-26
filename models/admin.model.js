@@ -56,6 +56,7 @@ const adminSchema = new mongoose.Schema({
       'manage_kyc',
       'manage_marksheets',
       'manage_certificates',
+      'manage_loans',
       'view_reports',
       'manage_admins'
     ]

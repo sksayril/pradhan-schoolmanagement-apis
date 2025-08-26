@@ -39,6 +39,16 @@ A comprehensive REST API for managing students, courses, batches, KYC verificati
 - **Late Fee Calculation**: Intelligent late fee calculation for overdue payments
 - **Payment Tracking**: Complete payment status and history tracking
 
+### 🏦 Loan Management System
+- **Gold Loans**: Secured loans against gold collateral with lower interest rates
+- **Education Loans**: Specialized loans for educational purposes with extended terms
+- **Personal Loans**: Unsecured loans for personal needs with flexible repayment
+- **Emergency Loans**: Quick loans for urgent situations with fast processing
+- **Automatic EMI Calculation**: Built-in EMI and interest calculations
+- **Payment Scheduling**: Complete installment schedule generation
+- **Payment Tracking**: Real-time payment status and overdue monitoring
+- **Admin Management**: Comprehensive loan approval and management workflow
+
 ### 🏢 Society Management
 - Society member registration with agent codes
 - KYC verification for members
@@ -118,6 +128,26 @@ See the examples directory for usage examples:
 
 ## API Documentation
 
+### Loan Management System
+
+The system supports comprehensive loan management with four main loan types:
+
+#### Loan Types
+- **Gold Loan (GOLD)**: Secured loans against gold collateral with lower interest rates
+- **Education Loan (EDUCATION)**: Specialized loans for educational purposes
+- **Personal Loan (PERSONAL)**: Unsecured loans for personal needs
+- **Emergency Loan (EMERGENCY)**: Quick loans for urgent situations
+
+#### Key Features
+- Admin can set custom interest rates for each loan type
+- Automatic EMI calculation and payment schedule generation
+- Complete payment tracking and overdue monitoring
+- Comprehensive admin workflow for loan approval and management
+- Real-time loan status updates and notifications
+
+For detailed API documentation, see:
+- [Loan Management API Documentation](docs/loan-api.md)
+
 ### Payment Request System
 
 The system supports comprehensive payment management with four main payment types:
@@ -141,6 +171,7 @@ The system supports comprehensive payment management with four main payment type
 - Complete payment tracking and audit trail
 
 For detailed API documentation, see:
+- [Loan Management API Documentation](docs/loan-api.md)
 - [Payment Requests API Documentation](docs/payment-requests-api.md)
 - [Society Management API Documentation](docs/society-api.md)
 - [Student Management API Documentation](docs/student-api.md)
@@ -501,12 +532,15 @@ Authorization: Bearer <admin_token>
 │   ├── agent.model.js
 │   ├── admin.model.js
 │   ├── course.model.js
-│   └── batch.model.js
+│   ├── batch.model.js
+│   └── loan.model.js
 ├── routes/
 │   ├── student.js
 │   ├── societyMember.js
 │   ├── adminSociety.js
 │   ├── admin.js
+│   ├── loans.js
+│   ├── adminLoans.js
 │   └── index.js
 ├── middleware/
 │   ├── auth.js
@@ -515,6 +549,7 @@ Authorization: Bearer <admin_token>
 │   ├── database.js
 │   └── razorpay.js
 ├── docs/
+│   ├── loan-api.md
 │   ├── admin-api.md
 │   ├── student-api.md
 │   └── society-api.md

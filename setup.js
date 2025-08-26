@@ -44,6 +44,7 @@ const createDefaultAdmin = async () => {
         'manage_kyc',
         'manage_marksheets',
         'manage_certificates',
+        'manage_loans',
         'view_reports',
         'manage_admins'
       ]

@@ -16,6 +16,8 @@ const adminRouter = require('./routes/admin');
 const societyMemberRouter = require('./routes/societyMember');
 const adminSocietyRouter = require('./routes/adminSociety');
 const paymentRequestRouter = require('./routes/paymentRequests');
+const loanRouter = require('./routes/loans');
+const adminLoanRouter = require('./routes/adminLoans');
 
 const app = express();
 
@@ -63,6 +65,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/society-member', societyMemberRouter);
 app.use('/api/admin-society', adminSocietyRouter);
 app.use('/api/payment-requests', paymentRequestRouter);
+app.use('/api/loans', loanRouter);
+app.use('/api/admin/loans', adminLoanRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
