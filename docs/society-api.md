@@ -5,7 +5,7 @@ This API provides comprehensive society management functionality including membe
 
 ## Base URL
 ```
-http://localhost:3100/api/society-member/signup
+http://localhost:3500/api/society-member/signup
 ```
 
 ## Authentication
@@ -883,3 +883,118 @@ curl -X POST http://localhost:3000/api/admin-society/login \
     "password": "adminpassword123"
   }'
 ```
+
+## Bank Document Management
+
+### 13. Upload Bank Document
+**POST** `/upload-bank-document`
+Upload bank account statement or passbook photo.
+
+**Request:**
+- Method: `POST`
+- Content-Type: `multipart/form-data`
+- Authentication: Required
+
+**Form Data:**
+- `bankDocument`: Bank document file (PDF/Image)
+- `documentType`: Either "accountStatement" or "passbook"
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Account Statement uploaded successfully",
+  "data": {
+    "documentType": "accountStatement",
+    "documentPath": "/uploads/bank-documents/statement-123.pdf",
+    "uploadedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### 14. Get Bank Documents
+**GET** `/bank-documents`
+Get the member's uploaded bank documents.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "accountStatement": "/uploads/bank-documents/statement-123.pdf",
+    "passbook": "/uploads/bank-documents/passbook-123.jpg",
+    "uploadedAt": "2024-01-01T00:00:00.000Z",
+    "hasDocuments": true
+  }
+}
+```
+
+### 15. Delete Bank Document
+**DELETE** `/bank-documents/:documentType`
+Delete a specific bank document.
+
+**Parameters:**
+- `documentType`: Either "accountStatement" or "passbook"
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Account Statement removed successfully"
+}
+```
+
+## Error Responses
+
+### Validation Error
+```json
+{
+  "success": false,
+  "message": "Validation error message"
+}
+```
+
+### Authentication Error
+```json
+{
+  "success": false,
+  "message": "Authentication required"
+}
+```
+
+### Not Found Error
+```json
+{
+  "success": false,
+  "message": "Resource not found"
+}
+```
+
+### Server Error
+```json
+{
+  "success": false,
+  "message": "Internal server error"
+}
+```
+
+## File Upload Requirements
+
+### Supported File Types
+- **Images**: JPEG, JPG, PNG, WebP
+- **Documents**: PDF
+
+### File Size Limits
+- Maximum file size: 10MB per file
+- Maximum files per request: 5
+
+### File Naming
+Files are automatically renamed with unique timestamps to prevent conflicts.
+
+## Notes
+
+1. **KYC Completion**: Members must complete KYC to access certain features.
+2. **File Storage**: Uploaded files are stored in the `uploads/` directory with organized subdirectories.
+3. **Security**: All sensitive endpoints require valid JWT authentication.
+4. **Validation**: Input validation is performed on both client and server side.
+5. **Error Handling**: Comprehensive error handling with meaningful error messages.

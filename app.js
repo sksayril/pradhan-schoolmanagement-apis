@@ -68,6 +68,12 @@ app.use('/api/payment-requests', paymentRequestRouter);
 app.use('/api/loans', loanRouter);
 app.use('/api/admin/loans', adminLoanRouter);
 
+// Start loan penalty scheduler
+const { startPenaltyScheduler } = require('./utilities/loanPenaltyScheduler');
+
+// Start the scheduler when app starts
+startPenaltyScheduler();
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

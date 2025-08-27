@@ -5,6 +5,7 @@ const Student = require('../models/student.model');
 const Admin = require('../models/admin.model');
 const Course = require('../models/course.model');
 const Batch = require('../models/batch.model');
+const SocietyMember = require('../models/societyMember.model'); // Added for new routes
 const { authenticateAdmin, requirePermission } = require('../middleware/auth');
 const { courseUpload, certificateUpload, marksheetUpload, handleUploadError } = require('../middleware/upload');
 const { createProduct, createPrice } = require('../utilities/razorpay');
@@ -1356,6 +1357,115 @@ router.get('/dashboard', authenticateAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Get dashboard error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get Society Member Bank Documents
+router.get('/society-members/:memberId/bank-documents', authenticateAdmin, requirePermission('manage_society_members'), async (req, res) => {
+  try {
+    const { memberId } = req.params;
+
+    const member = await SocietyMember.findById(memberId)
+      .select('firstName lastName memberAccountNumber email bankDocuments');
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: 'Society member not found'
+      });
+    }
+
+    // Convert file paths to web URLs
+    const bankDocuments = {
+      accountStatement: member.bankDocuments.accountStatement ? toWebPath(member.bankDocuments.accountStatement) : null,
+      passbook: member.bankDocuments.passbook ? toWebPath(member.bankDocuments.passbook) : null,
+      uploadedAt: member.bankDocuments.uploadedAt,
+      hasDocuments: !!(member.bankDocuments.accountStatement || member.bankDocuments.passbook)
+    };
+
+    res.json({
+      success: true,
+      data: {
+        member: {
+          id: member._id,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          memberAccountNumber: member.memberAccountNumber,
+          email: member.email
+        },
+        bankDocuments
+      }
+    });
+  } catch (error) {
+    console.error('Get society member bank documents error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get All Society Members with Bank Document Status
+router.get('/society-members/bank-documents-status', authenticateAdmin, requirePermission('manage_society_members'), async (req, res) => {
+  try {
+    const { page = 1, limit = 10, hasDocuments } = req.query;
+    
+    const filter = {};
+    if (hasDocuments === 'true') {
+      filter.$or = [
+        { 'bankDocuments.accountStatement': { $exists: true, $ne: null } },
+        { 'bankDocuments.passbook': { $exists: true, $ne: null } }
+      ];
+    } else if (hasDocuments === 'false') {
+      filter.$and = [
+        { 'bankDocuments.accountStatement': { $in: [null, undefined] } },
+        { 'bankDocuments.passbook': { $in: [null, undefined] } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+    
+    const members = await SocietyMember.find(filter)
+      .select('firstName lastName memberAccountNumber email bankDocuments createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await SocietyMember.countDocuments(filter);
+
+    const membersWithStatus = members.map(member => ({
+      id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      memberAccountNumber: member.memberAccountNumber,
+      email: member.email,
+      bankDocuments: {
+        hasAccountStatement: !!member.bankDocuments.accountStatement,
+        hasPassbook: !!member.bankDocuments.passbook,
+        uploadedAt: member.bankDocuments.uploadedAt,
+        hasAnyDocument: !!(member.bankDocuments.accountStatement || member.bankDocuments.passbook)
+      }
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        members: membersWithStatus,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalMembers: total,
+          hasNext: skip + members.length < total,
+          hasPrev: page > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get society members bank documents status error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

@@ -52,6 +52,7 @@ A comprehensive REST API for managing students, courses, batches, KYC verificati
 ### 🏢 Society Management
 - Society member registration with agent codes
 - KYC verification for members
+- Bank document upload and management (account statements, passbooks)
 - Agent management and performance tracking
 - Member account numbers and referral codes
 - Membership types and contribution tracking
@@ -619,10 +620,11 @@ After running `node setupSociety.js`, the following default accounts are created
 
 ## API Documentation
 
-Complete API documentation is available in the `docs/` folder:
-- `docs/student-api.md` - Student management APIs
-- `docs/admin-api.md` - Admin management APIs
-- `docs/society-api.md` - Society management APIs
+- [Student API](docs/student-api.md) - Student management endpoints
+- [Admin API](docs/admin-api.md) - Admin panel endpoints
+- [Society Member API](docs/society-api.md) - Society member endpoints including bank document management
+- [Payment Requests API](docs/payment-requests-api.md) - Payment management endpoints
+- [Loan API](docs/loan-api.md) - Loan management endpoints
 
 ## Contributing
 

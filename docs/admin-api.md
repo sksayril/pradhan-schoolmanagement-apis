@@ -1,33 +1,37 @@
 # Admin API Documentation
 
+## Overview
+This document describes the API endpoints available for administrators to manage the system.
+
 ## Base URL
 ```
-http://localhost:3000/api/admin
+http://localhost:3500/api/admin
 ```
 
 ## Authentication
-All protected routes require a Bearer token in the Authorization header:
+All endpoints require authentication using JWT tokens. Include the token in the Authorization header:
 ```
-Authorization: Bearer <jwt_token>
+Authorization: Bearer <your_jwt_token>
 ```
 
 ## Permissions
-Admin routes require specific permissions:
-- `manage_students` - Manage student accounts
+Different endpoints require different permissions. The available permissions are:
+- `manage_students` - Manage student accounts and KYC
 - `manage_courses` - Create and manage courses
-- `manage_batches` - Create and manage batches
-- `manage_payments` - Handle payment operations
-- `manage_kyc` - Approve KYC documents
-- `manage_marksheets` - Create and manage marksheets
-- `manage_certificates` - Create and manage certificates
-- `view_reports` - View system reports
-- `manage_admins` - Manage admin accounts
+- `manage_batches` - Create and manage course batches
+- `manage_payments` - Handle payment requests
+- `manage_kyc` - Approve/reject KYC documents
+- `manage_marksheets` - Create and manage student marksheets
+- `manage_certificates` - Create and manage student certificates
+- `manage_loans` - Manage loan applications
+- `manage_society_members` - Manage society member accounts and documents
+- `view_reports` - Access system reports and analytics
+- `manage_admins` - Manage other admin accounts
 
 ## Endpoints
 
-### 1. Admin Signup
+### 1. Admin Registration
 **POST** `/signup`
-
 Register a new admin account.
 
 **Request Body:**
@@ -39,14 +43,7 @@ Register a new admin account.
   "phone": "9876543210",
   "password": "admin123",
   "role": "admin",
-  "permissions": [
-    "manage_students",
-    "manage_courses",
-    "manage_batches",
-    "manage_kyc",
-    "manage_marksheets",
-    "manage_certificates"
-  ]
+  "permissions": ["manage_students", "manage_courses"]
 }
 ```
 
@@ -58,19 +55,12 @@ Register a new admin account.
   "data": {
     "admin": {
       "id": "admin_id",
-      "adminId": "ADM20240001",
+      "adminId": "ADM2024000001",
       "firstName": "Admin",
       "lastName": "User",
       "email": "admin@example.com",
       "role": "admin",
-      "permissions": [
-        "manage_students",
-        "manage_courses",
-        "manage_batches",
-        "manage_kyc",
-        "manage_marksheets",
-        "manage_certificates"
-      ]
+      "permissions": ["manage_students", "manage_courses"]
     },
     "token": "jwt_token_here"
   }
@@ -79,8 +69,7 @@ Register a new admin account.
 
 ### 2. Admin Login
 **POST** `/login`
-
-Authenticate admin and get access token.
+Authenticate an admin account.
 
 **Request Body:**
 ```json
@@ -98,68 +87,79 @@ Authenticate admin and get access token.
   "data": {
     "admin": {
       "id": "admin_id",
-      "adminId": "ADM20240001",
+      "adminId": "ADM2024000001",
       "firstName": "Admin",
       "lastName": "User",
       "email": "admin@example.com",
       "role": "admin",
-      "permissions": ["manage_students", "manage_courses", "manage_batches"]
+      "permissions": ["manage_students", "manage_courses"]
     },
-    "token": "jwt_token_here"
+    "token": "jwt_token"
   }
 }
 ```
 
 ### 3. Get Admin Profile
 **GET** `/profile`
-
-Get admin's profile information.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get the admin's profile information.
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "_id": "admin_id",
-    "adminId": "ADM20240001",
+    "id": "admin_id",
+    "adminId": "ADM2024000001",
     "firstName": "Admin",
     "lastName": "User",
     "email": "admin@example.com",
     "phone": "9876543210",
     "role": "admin",
-    "permissions": ["manage_students", "manage_courses", "manage_batches"],
+    "permissions": ["manage_students", "manage_courses"],
     "isActive": true,
-    "lastLogin": "2024-01-10T10:30:00.000Z",
+    "lastLogin": "2024-01-01T00:00:00.000Z",
     "createdAt": "2024-01-01T00:00:00.000Z"
   }
 }
 ```
 
-### 4. Get All Students (with passwords)
+### 4. Update Admin Profile
+**PUT** `/profile`
+Update the admin's profile information.
+
+**Request Body:**
+```json
+{
+  "firstName": "Admin",
+  "lastName": "User",
+  "phone": "9876543210"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Profile updated successfully",
+  "data": {
+    "id": "admin_id",
+    "firstName": "Admin",
+    "lastName": "User",
+    "phone": "9876543210"
+  }
+}
+```
+
+### 5. Get All Students
 **GET** `/students`
-
-Get list of all students with passwords included.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get a list of all students with pagination and filtering.
 
 **Query Parameters:**
-- `status` (optional): "active" or "inactive"
-- `kycStatus` (optional): "approved" or "pending"
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10)
-
-**Example:**
-```
-GET /students?status=active&kycStatus=approved&page=1&limit=20
-```
+- `status` (optional): Filter by account status
+- `kycStatus` (optional): Filter by KYC status
+- `search` (optional): Search by name or email
 
 **Response:**
 ```json
@@ -168,13 +168,13 @@ GET /students?status=active&kycStatus=approved&page=1&limit=20
   "data": {
     "students": [
       {
-        "_id": "student_id",
-        "studentId": "STU20240001",
+        "id": "student_id",
+        "studentId": "STU2024000001",
         "firstName": "John",
         "lastName": "Doe",
         "email": "john@example.com",
         "phone": "9876543210",
-        "password": "hashed_password_here",
+        "kycStatus": "approved",
         "isKycApproved": true,
         "isAccountActive": true,
         "createdAt": "2024-01-01T00:00:00.000Z"
@@ -183,7 +183,7 @@ GET /students?status=active&kycStatus=approved&page=1&limit=20
     "pagination": {
       "currentPage": 1,
       "totalPages": 5,
-      "totalStudents": 100,
+      "totalStudents": 50,
       "hasNext": true,
       "hasPrev": false
     }
@@ -191,31 +191,22 @@ GET /students?status=active&kycStatus=approved&page=1&limit=20
 }
 ```
 
-### 5. Get Student Details (with password)
-**Note**: The `:studentId` parameter can be either the MongoDB `_id` or the `studentId` (e.g., "STU20240001").
+### 6. Get Student Details
 **GET** `/students/:studentId`
-
-Get detailed information about a specific student including password.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get detailed information about a specific student.
 
 **Response:**
 ```json
 {
   "success": true,
   "data": {
-    "_id": "student_id",
-    "studentId": "STU20240001",
+    "id": "student_id",
+    "studentId": "STU2024000001",
     "firstName": "John",
     "lastName": "Doe",
     "email": "john@example.com",
     "phone": "9876543210",
-    "password": "hashed_password_here",
-    "originalPassword": "password123", // Set automatically by system
-    "dateOfBirth": "1995-01-01T00:00:00.000Z",
+    "dateOfBirth": "1990-01-01T00:00:00.000Z",
     "gender": "male",
     "address": {
       "street": "123 Main St",
@@ -223,92 +214,72 @@ Authorization: Bearer <token>
       "state": "Maharashtra",
       "pincode": "400001"
     },
-    "kycDocuments": {
-      "aadharCard": {
-        "number": "123456789012",
-        "document": "/uploads/kyc/aadhar.pdf"
-      },
-      "panCard": {
-        "number": "ABCDE1234F",
-        "document": "/uploads/kyc/pan.pdf"
-      },
-      "profilePhoto": "/uploads/profiles/photo.jpg"
-    },
+    "kycStatus": "approved",
     "isKycApproved": true,
     "isAccountActive": true,
-    "kycApprovedBy": {
-      "_id": "admin_id",
-      "firstName": "Admin",
-      "lastName": "User"
-    },
-    "kycApprovedAt": "2024-01-05T00:00:00.000Z",
-    "signupTime": "2024-01-01T10:30:00.000Z",
-    "enrollments": [
-      {
-        "course": {
-          "_id": "course_id",
-          "title": "JavaScript Fundamentals",
-          "courseType": "online"
-        },
-        "batch": {
-          "_id": "batch_id",
-          "name": "Morning Batch",
-          "startDate": "2024-01-15T00:00:00.000Z",
-          "endDate": "2024-03-15T00:00:00.000Z"
-        },
-        "enrollmentDate": "2024-01-10T00:00:00.000Z",
-        "paymentStatus": "completed",
-        "paymentAmount": 2999,
-        "paymentMethod": "online",
-        "isActive": true
-      }
-    ],
-    "marksheets": [
-      {
-        "course": {
-          "_id": "course_id",
-          "title": "JavaScript Fundamentals"
-        },
-        "marks": 85,
-        "grade": "A",
-        "issuedDate": "2024-03-15T00:00:00.000Z",
-        "issuedBy": {
-          "_id": "admin_id",
-          "firstName": "Admin",
-          "lastName": "User"
-        }
-      }
-    ],
-    "certificates": [
-      {
-        "course": {
-          "_id": "course_id",
-          "title": "JavaScript Fundamentals"
-        },
-        "certificateNumber": "CERT20240001",
-        "issuedDate": "2024-03-15T00:00:00.000Z",
-        "issuedBy": {
-          "_id": "admin_id",
-          "firstName": "Admin",
-          "lastName": "User"
-        },
-        "certificateUrl": "/uploads/certificates/certificate.pdf"
-      }
-    ]
+    "enrollments": [],
+    "certificates": [],
+    "marksheets": [],
+    "createdAt": "2024-01-01T00:00:00.000Z"
   }
 }
 ```
 
-### 6. Reset Student Password
-**PUT** `/students/:studentId/reset-password`
+### 7. Approve Student KYC
+**POST** `/students/:studentId/kyc/approve`
+Approve a student's KYC documents.
 
-Reset a student's password and show the original password.
+**Request Body:**
+```json
+{
+  "notes": "KYC documents verified successfully"
+}
+```
 
-**Headers:**
+**Response:**
+```json
+{
+  "success": true,
+  "message": "KYC approved successfully",
+  "data": {
+    "studentId": "STU2024000001",
+    "kycStatus": "approved",
+    "isKycApproved": true,
+    "approvedBy": "admin_id",
+    "approvedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
 ```
-Authorization: Bearer <token>
-Content-Type: application/json
+
+### 8. Reject Student KYC
+**POST** `/students/:studentId/kyc/reject`
+Reject a student's KYC documents.
+
+**Request Body:**
+```json
+{
+  "reason": "Documents are unclear",
+  "notes": "Please upload clear copies"
+}
 ```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "KYC rejected successfully",
+  "data": {
+    "studentId": "STU2024000001",
+    "kycStatus": "rejected",
+    "kycRejectionReason": "Documents are unclear",
+    "rejectedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+### 9. Reset Student Password
+**POST** `/students/:studentId/reset-password`
+Reset a student's password.
 
 **Request Body:**
 ```json
@@ -321,133 +292,43 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "Student password reset successfully",
+  "message": "Password reset successfully",
   "data": {
-    "studentId": "STU20240001",
-    "email": "john@example.com",
-    "originalPassword": "newpassword123",
-    "passwordUpdatedAt": "2024-01-10T10:30:00.000Z"
-  }
-}
-```
-
-### 7. Get Student Details with Original Password
-**GET** `/students/:studentId/with-original-password`
-
-Get detailed student information including original password and signup time.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "student_id",
-    "studentId": "STU20240001",
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com",
-    "originalPassword": "password123",
-    "hashedPassword": "$2a$12$tuwGTL5jmaiyTgXRzU3aJ.u3SXW1B/JKbQfXf/.8cKBRQFGAOAAca",
-    "signupTime": "2024-01-01T10:30:00.000Z",
-    "createdAt": "2024-01-01T10:30:00.000Z",
-    "updatedAt": "2024-01-10T10:30:00.000Z"
-  }
-}
-```
-
-### 8. Approve KYC
-**POST** `/students/:studentId/approve-kyc`
-
-Approve student's KYC documents and activate account. Requires Aadhar document and profile photo. PAN is optional.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "KYC approved successfully",
-  "data": {
-    "studentId": "STU20240001",
-    "kycStatus": "approved",
-    "isKycApproved": true,
-    "isAccountActive": true,
-    "kycApprovedAt": "2024-01-10T10:30:00.000Z"
-  }
-}
-```
-
-### 9. Reject KYC
-**POST** `/students/:studentId/reject-kyc`
-
-Reject student's KYC documents with a reason.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
-
-**Request Body:**
-```json
-{
-  "reason": "Documents are unclear and cannot be verified"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "KYC rejected successfully",
-  "data": {
-    "studentId": "STU20240001",
-    "kycStatus": "rejected",
-    "kycRejectionReason": "Documents are unclear and cannot be verified"
+    "studentId": "STU2024000001",
+    "newPassword": "newpassword123"
   }
 }
 ```
 
 ### 10. Create Course
 **POST** `/courses`
+Create a new course.
 
-Create a new course (online or offline).
+**Request:**
+- Method: `POST`
+- Content-Type: `multipart/form-data`
+- Authentication: Required
+- Permission: `manage_courses`
 
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-```
-
-**Request Body:**
-```
-title: "JavaScript Fundamentals"
-description: "Learn JavaScript from scratch"
-shortDescription: "Complete JavaScript course for beginners"
-courseType: "online"
-category: "programming"
-subcategory: "web-development"
-duration: 40
-level: "beginner"
-language: "English"
-price: 2999
-originalPrice: 3999
-syllabus: "[{\"week\": 1, \"title\": \"Introduction\", \"topics\": [\"Variables\", \"Functions\"]}]"
-prerequisites: "[\"Basic HTML\", \"Basic CSS\"]"
-learningOutcomes: "[\"Build web applications\", \"Understand JavaScript concepts\"]"
-offlineCourse: "{\"location\": {\"address\": \"123 Main St\", \"city\": \"Mumbai\"}, \"maxStudents\": 30}"
-thumbnail: <file>
-banner: <file>
-coursePdf: <file>
-```
+**Form Data:**
+- `title`: Course title
+- `description`: Course description
+- `shortDescription`: Short course description
+- `courseType`: "online" or "offline"
+- `category`: Course category
+- `subcategory`: Course subcategory
+- `duration`: Course duration in hours
+- `level`: "beginner", "intermediate", or "advanced"
+- `language`: Course language
+- `price`: Course price
+- `originalPrice`: Original course price
+- `syllabus`: JSON string of course syllabus
+- `prerequisites`: JSON array of prerequisites
+- `learningOutcomes`: JSON array of learning outcomes
+- `coursePdf`: Course PDF file (optional)
+- `courseVideo`: Course video files (optional)
+- `thumbnail`: Course thumbnail image (optional)
+- `banner`: Course banner image (optional)
 
 **Response:**
 ```json
@@ -455,53 +336,24 @@ coursePdf: <file>
   "success": true,
   "message": "Course created successfully",
   "data": {
-    "_id": "course_id",
+    "courseId": "CRS2024000001",
     "title": "JavaScript Fundamentals",
-    "description": "Learn JavaScript from scratch",
-    "courseType": "online",
-    "category": "programming",
-    "duration": 40,
-    "level": "beginner",
     "price": 2999,
-    "originalPrice": 3999,
-    "discountPercentage": 25,
-    "thumbnail": "/uploads/courses/thumbnail.jpg",
-    "banner": "/uploads/courses/banner.jpg",
-    "onlineCourse": {
-      "pdfContent": "/uploads/courses/course.pdf",
-      "razorpayProductId": "prod_123",
-      "razorpayPriceId": "price_123"
-    },
-    "totalEnrollments": 0,
-    "averageRating": 0,
-    "totalRatings": 0,
-    "createdBy": "admin_id",
-    "createdAt": "2024-01-10T10:30:00.000Z"
+    "createdBy": "admin_id"
   }
 }
 ```
 
-### 8. Get All Courses
+### 11. Get All Courses
 **GET** `/courses`
-
-Get list of all courses with optional filters.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get a list of all courses.
 
 **Query Parameters:**
-- `status` (optional): "active" or "inactive"
-- `courseType` (optional): "online" or "offline"
-- `category` (optional): Course category
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10)
-
-**Example:**
-```
-GET /courses?status=active&courseType=online&category=programming&page=1&limit=20
-```
+- `status` (optional): Filter by course status
+- `category` (optional): Filter by category
+- `search` (optional): Search by title or description
 
 **Response:**
 ```json
@@ -510,25 +362,15 @@ GET /courses?status=active&courseType=online&category=programming&page=1&limit=2
   "data": {
     "courses": [
       {
-        "_id": "course_id",
+        "id": "course_id",
+        "courseId": "CRS2024000001",
         "title": "JavaScript Fundamentals",
         "description": "Learn JavaScript from scratch",
         "courseType": "online",
         "category": "programming",
-        "duration": 40,
-        "level": "beginner",
         "price": 2999,
         "originalPrice": 3999,
-        "discountPercentage": 25,
-        "thumbnail": "/uploads/courses/thumbnail.jpg",
-        "totalEnrollments": 150,
-        "averageRating": 4.5,
-        "totalRatings": 45,
-        "createdBy": {
-          "_id": "admin_id",
-          "firstName": "Admin",
-          "lastName": "User"
-        },
+        "isActive": true,
         "createdAt": "2024-01-01T00:00:00.000Z"
       }
     ],
@@ -543,25 +385,16 @@ GET /courses?status=active&courseType=online&category=programming&page=1&limit=2
 }
 ```
 
-### 9. Update Course
+### 12. Update Course
 **PUT** `/courses/:courseId`
-
-Update course information.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
+Update an existing course.
 
 **Request Body:**
 ```json
 {
-  "title": "Advanced JavaScript",
-  "description": "Advanced JavaScript concepts",
-  "price": 3999,
-  "isActive": true,
-  "isPublished": true
+  "title": "Updated JavaScript Fundamentals",
+  "price": 3499,
+  "isActive": true
 }
 ```
 
@@ -571,37 +404,33 @@ Content-Type: application/json
   "success": true,
   "message": "Course updated successfully",
   "data": {
-    "_id": "course_id",
-    "title": "Advanced JavaScript",
-    "description": "Advanced JavaScript concepts",
-    "price": 3999,
-    "isActive": true,
-    "isPublished": true,
-    "updatedAt": "2024-01-10T10:30:00.000Z"
+    "courseId": "CRS2024000001",
+    "title": "Updated JavaScript Fundamentals",
+    "price": 3499
   }
 }
 ```
 
-### 10. Create Batch
+### 13. Create Batch
 **POST** `/batches`
-
-Create a new batch for a course.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
+Create a new course batch.
 
 **Request Body:**
 ```json
 {
   "name": "Morning Batch",
-  "description": "Morning session batch",
-  "courseId": "course_id_here",
-  "startDate": "2024-01-15",
-  "endDate": "2024-03-15",
-  "schedule": "[{\"day\": \"monday\", \"startTime\": \"09:00\", \"endTime\": \"11:00\", \"room\": \"Room 101\"}]",
+  "description": "Morning session for JavaScript course",
+  "course": "course_id",
+  "startDate": "2024-02-01",
+  "endDate": "2024-04-01",
+  "schedule": [
+    {
+      "day": "monday",
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "room": "Room 101"
+    }
+  ],
   "maxStudents": 20,
   "batchPrice": 3999,
   "originalPrice": 4999
@@ -614,53 +443,23 @@ Content-Type: application/json
   "success": true,
   "message": "Batch created successfully",
   "data": {
-    "_id": "batch_id",
+    "batchId": "BAT2024000001",
     "name": "Morning Batch",
-    "description": "Morning session batch",
     "course": "course_id",
-    "startDate": "2024-01-15T00:00:00.000Z",
-    "endDate": "2024-03-15T00:00:00.000Z",
-    "schedule": [
-      {
-        "day": "monday",
-        "startTime": "09:00",
-        "endTime": "11:00",
-        "room": "Room 101"
-      }
-    ],
-    "maxStudents": 20,
-    "currentStudents": 0,
-    "batchPrice": 3999,
-    "originalPrice": 4999,
-    "discountPercentage": 20,
-    "status": "upcoming",
-    "isActive": true,
-    "createdBy": "admin_id",
-    "createdAt": "2024-01-10T10:30:00.000Z"
+    "createdBy": "admin_id"
   }
 }
 ```
 
-### 11. Get All Batches
+### 14. Get All Batches
 **GET** `/batches`
-
-Get list of all batches with optional filters.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get a list of all batches.
 
 **Query Parameters:**
-- `status` (optional): "upcoming", "active", "completed", "cancelled"
-- `courseId` (optional): Filter by course ID
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10)
-
-**Example:**
-```
-GET /batches?status=upcoming&courseId=course_id_here&page=1&limit=20
-```
+- `course` (optional): Filter by course ID
+- `status` (optional): Filter by batch status
 
 **Response:**
 ```json
@@ -669,26 +468,18 @@ GET /batches?status=upcoming&courseId=course_id_here&page=1&limit=20
   "data": {
     "batches": [
       {
-        "_id": "batch_id",
+        "id": "batch_id",
+        "batchId": "BAT2024000001",
         "name": "Morning Batch",
-        "description": "Morning session batch",
+        "description": "Morning session for JavaScript course",
         "course": {
-          "_id": "course_id",
-          "title": "JavaScript Fundamentals",
-          "courseType": "offline"
+          "id": "course_id",
+          "title": "JavaScript Fundamentals"
         },
-        "startDate": "2024-01-15T00:00:00.000Z",
-        "endDate": "2024-03-15T00:00:00.000Z",
+        "startDate": "2024-02-01T00:00:00.000Z",
+        "endDate": "2024-04-01T00:00:00.000Z",
         "maxStudents": 20,
-        "currentStudents": 15,
         "batchPrice": 3999,
-        "status": "upcoming",
-        "isActive": true,
-        "createdBy": {
-          "_id": "admin_id",
-          "firstName": "Admin",
-          "lastName": "User"
-        },
         "createdAt": "2024-01-01T00:00:00.000Z"
       }
     ],
@@ -703,25 +494,17 @@ GET /batches?status=upcoming&courseId=course_id_here&page=1&limit=20
 }
 ```
 
-### 12. Enroll Student in Offline Course
-**POST** `/enroll-student`
-
-Enroll a student in an offline course or batch.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
+### 15. Enroll Student in Offline Course
+**POST** `/students/:studentId/enroll-offline`
+Enroll a student in an offline course batch.
 
 **Request Body:**
 ```json
 {
-  "studentId": "student_id_here",
-  "courseId": "course_id_here",
-  "batchId": "batch_id_here",
-  "paymentAmount": 3999,
-  "paymentMethod": "cash"
+  "batch": "batch_id",
+  "enrollmentDate": "2024-01-01",
+  "paymentMethod": "cash",
+  "amount": 3999
 }
 ```
 
@@ -731,33 +514,31 @@ Content-Type: application/json
   "success": true,
   "message": "Student enrolled successfully",
   "data": {
-    "studentId": "STU20240001",
-    "courseTitle": "JavaScript Fundamentals",
-    "enrollmentDate": "2024-01-10T10:30:00.000Z"
+    "studentId": "STU2024000001",
+    "batchId": "BAT2024000001",
+    "enrollmentDate": "2024-01-01T00:00:00.000Z",
+    "status": "enrolled"
   }
 }
 ```
 
-### 13. Create Marksheet
-**POST** `/marksheets`
-
+### 16. Create Marksheet
+**POST** `/students/:studentId/marksheets`
 Create a marksheet for a student.
 
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
+**Request:**
+- Method: `POST`
+- Content-Type: `multipart/form-data`
+- Authentication: Required
+- Permission: `manage_marksheets`
 
-**Request Body:**
-```json
-{
-  "studentId": "student_id_here",
-  "courseId": "course_id_here",
-  "marks": 85,
-  "grade": "A"
-}
-```
+**Form Data:**
+- `course`: Course ID
+- `semester`: Semester number
+- `totalMarks`: Total marks
+- `obtainedMarks`: Obtained marks
+- `grade`: Grade (A, B, C, D, F)
+- `marksheet`: Marksheet file (PDF/Image)
 
 **Response:**
 ```json
@@ -765,31 +546,27 @@ Content-Type: application/json
   "success": true,
   "message": "Marksheet created successfully",
   "data": {
-    "studentId": "STU20240001",
+    "studentId": "STU2024000001",
     "courseTitle": "JavaScript Fundamentals",
-    "marks": 85,
+    "semester": 1,
     "grade": "A"
   }
 }
 ```
 
-### 14. Create Certificate
-**POST** `/certificates`
-
+### 17. Create Certificate
+**POST** `/students/:studentId/certificates`
 Create a certificate for a student.
 
-**Headers:**
-```
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-```
+**Request:**
+- Method: `POST`
+- Content-Type: `multipart/form-data`
+- Authentication: Required
+- Permission: `manage_certificates`
 
-**Request Body:**
-```
-studentId: "student_id_here"
-courseId: "course_id_here"
-certificate: <file>
-```
+**Form Data:**
+- `course`: Course ID
+- `certificate`: Certificate file (PDF/Image)
 
 **Response:**
 ```json
@@ -797,22 +574,16 @@ certificate: <file>
   "success": true,
   "message": "Certificate created successfully",
   "data": {
-    "studentId": "STU20240001",
+    "studentId": "STU2024000001",
     "courseTitle": "JavaScript Fundamentals",
-    "certificateNumber": "CERT20240001"
+    "certificateNumber": "CERT123456789"
   }
 }
 ```
 
-### 15. Get Dashboard Statistics
+### 18. Get Dashboard Statistics
 **GET** `/dashboard`
-
 Get system dashboard statistics.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
 
 **Response:**
 ```json
@@ -823,20 +594,92 @@ Authorization: Bearer <token>
     "activeStudents": 120,
     "kycStats": {
       "pending": 15,
-      "submitted": 10,
+      "submitted": 25,
       "approved": 100,
-      "rejected": 5
+      "rejected": 10
     },
     "totalCourses": 25,
-    "totalBatches": 15,
+    "totalBatches": 30,
     "totalEnrollments": 200
+  }
+}
+```
+
+## Society Member Management
+
+### 19. Get Society Member Bank Documents
+**GET** `/society-members/:memberId/bank-documents`
+Get bank documents for a specific society member.
+
+**Permission Required:** `manage_society_members`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "member": {
+      "id": "member_id",
+      "firstName": "John",
+      "lastName": "Doe",
+      "memberAccountNumber": "MEM2024000001",
+      "email": "john@example.com"
+    },
+    "bankDocuments": {
+      "accountStatement": "/uploads/bank-documents/statement-123.pdf",
+      "passbook": "/uploads/bank-documents/passbook-123.jpg",
+      "uploadedAt": "2024-01-01T00:00:00.000Z",
+      "hasDocuments": true
+    }
+  }
+}
+```
+
+### 20. Get All Society Members Bank Documents Status
+**GET** `/society-members/bank-documents-status`
+Get bank document status for all society members with pagination and filtering.
+
+**Permission Required:** `manage_society_members`
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 10)
+- `hasDocuments` (optional): Filter by document status ("true" or "false")
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "members": [
+      {
+        "id": "member_id",
+        "firstName": "John",
+        "lastName": "Doe",
+        "memberAccountNumber": "MEM2024000001",
+        "email": "john@example.com",
+        "bankDocuments": {
+          "hasAccountStatement": true,
+          "hasPassbook": false,
+          "uploadedAt": "2024-01-01T00:00:00.000Z",
+          "hasAnyDocument": true
+        }
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalMembers": 50,
+      "hasNext": true,
+      "hasPrev": false
+    }
   }
 }
 ```
 
 ## Error Responses
 
-### 400 Bad Request
+### Validation Error
 ```json
 {
   "success": false,
@@ -844,31 +687,31 @@ Authorization: Bearer <token>
 }
 ```
 
-### 401 Unauthorized
+### Authentication Error
 ```json
 {
   "success": false,
-  "message": "Access denied. No token provided."
+  "message": "Authentication required"
 }
 ```
 
-### 403 Forbidden
+### Permission Error
 ```json
 {
   "success": false,
-  "message": "Insufficient permissions."
+  "message": "Insufficient permissions"
 }
 ```
 
-### 404 Not Found
+### Not Found Error
 ```json
 {
   "success": false,
-  "message": "Student not found"
+  "message": "Resource not found"
 }
 ```
 
-### 500 Internal Server Error
+### Server Error
 ```json
 {
   "success": false,
@@ -878,49 +721,24 @@ Authorization: Bearer <token>
 
 ## File Upload Requirements
 
-### Course Content
-- **Course PDF**: PDF only (max 10MB)
-- **Course Videos**: MP4, AVI, MOV, WMV (max 10MB)
-- **Thumbnail**: JPG, JPEG, PNG, WEBP (max 10MB)
-- **Banner**: JPG, JPEG, PNG, WEBP (max 10MB)
+### Supported File Types
+- **Images**: JPEG, JPG, PNG, WebP
+- **Documents**: PDF
+- **Videos**: MP4, AVI, MOV, WMV
 
-### Certificates
-- **Certificate**: PDF, JPG, JPEG, PNG (max 10MB)
+### File Size Limits
+- Maximum file size: 10MB per file
+- Maximum files per request: 5
 
-## Status Codes
+### File Naming
+Files are automatically renamed with unique timestamps to prevent conflicts.
 
-- **200**: Success
-- **201**: Created
-- **400**: Bad Request
-- **401**: Unauthorized
-- **403**: Forbidden
-- **404**: Not Found
-- **500**: Internal Server Error
+## Notes
 
-## Admin Roles and Permissions
-
-### Super Admin
-- All permissions
-- Can manage other admins
-- Full system access
-
-### Admin
-- Most permissions except admin management
-- Can manage students, courses, batches
-- Can approve KYC and create academic records
-
-### Moderator
-- Limited permissions
-- Can view reports and basic operations
-- Cannot approve KYC or create academic records
-
-## Password Access
-
-**Important**: Admin routes that retrieve student data now include the hashed password field. This allows admins to:
-- View student passwords for administrative purposes
-- Reset student passwords if needed
-- Access student account information for support
-
-The password field is included in:
-- `GET /students` - List all students with passwords
-- `GET /students/:studentId` - Get specific student details with password 
+1. **Permissions**: Different admin roles have different access levels based on their permissions.
+2. **File Storage**: Uploaded files are stored in the `uploads/` directory with organized subdirectories.
+3. **Security**: All endpoints require valid JWT authentication and appropriate permissions.
+4. **Validation**: Input validation is performed on both client and server side.
+5. **Error Handling**: Comprehensive error handling with meaningful error messages.
+6. **Pagination**: List endpoints support pagination for better performance.
+7. **File Management**: Admin can view and manage all uploaded files including bank documents. 

@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const SocietyMember = require('../models/societyMember.model');
 const Agent = require('../models/agent.model');
 const { authenticateSocietyMember, requireKycApproved } = require('../middleware/auth');
-const { kycUpload, handleUploadError } = require('../middleware/upload');
+const { kycUpload, handleUploadError, bankDocumentUpload } = require('../middleware/upload');
 
 // Society Member Signup
 router.post('/signup', async (req, res) => {
@@ -493,6 +493,111 @@ router.post('/logout', authenticateSocietyMember, async (req, res) => {
     });
   } catch (error) {
     console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Upload Bank Document (Account Statement or Passbook)
+router.post('/upload-bank-document', authenticateSocietyMember, bankDocumentUpload, async (req, res) => {
+  try {
+    const { documentType } = req.body; // 'accountStatement' or 'passbook'
+    const member = req.societyMember;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload a document'
+      });
+    }
+
+    if (!documentType || !['accountStatement', 'passbook'].includes(documentType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document type must be either "accountStatement" or "passbook"'
+      });
+    }
+
+    // Update the member's bank document
+    member.bankDocuments[documentType] = req.file.path;
+    member.bankDocuments.uploadedAt = new Date();
+    member.bankDocuments.uploadedBy = member._id;
+
+    await member.save();
+
+    res.json({
+      success: true,
+      message: `${documentType === 'accountStatement' ? 'Account Statement' : 'Passbook'} uploaded successfully`,
+      data: {
+        documentType,
+        documentPath: req.file.path,
+        uploadedAt: member.bankDocuments.uploadedAt
+      }
+    });
+  } catch (error) {
+    console.error('Upload bank document error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get Bank Documents (for the authenticated member)
+router.get('/bank-documents', authenticateSocietyMember, async (req, res) => {
+  try {
+    const member = req.societyMember;
+
+    res.json({
+      success: true,
+      data: {
+        accountStatement: member.bankDocuments.accountStatement,
+        passbook: member.bankDocuments.passbook,
+        uploadedAt: member.bankDocuments.uploadedAt,
+        hasDocuments: !!(member.bankDocuments.accountStatement || member.bankDocuments.passbook)
+      }
+    });
+  } catch (error) {
+    console.error('Get bank documents error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Delete Bank Document
+router.delete('/bank-documents/:documentType', authenticateSocietyMember, async (req, res) => {
+  try {
+    const { documentType } = req.params;
+    const member = req.societyMember;
+
+    if (!['accountStatement', 'passbook'].includes(documentType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid document type. Must be "accountStatement" or "passbook"'
+      });
+    }
+
+    // Remove the document path
+    member.bankDocuments[documentType] = null;
+    
+    // If no documents remain, clear the upload metadata
+    if (!member.bankDocuments.accountStatement && !member.bankDocuments.passbook) {
+      member.bankDocuments.uploadedAt = null;
+      member.bankDocuments.uploadedBy = null;
+    }
+
+    await member.save();
+
+    res.json({
+      success: true,
+      message: `${documentType === 'accountStatement' ? 'Account Statement' : 'Passbook'} removed successfully`
+    });
+  } catch (error) {
+    console.error('Delete bank document error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

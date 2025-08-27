@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const Loan = require('../models/loan.model');
 const SocietyMember = require('../models/societyMember.model');
@@ -170,10 +171,26 @@ router.get('/my-loans', authenticateSocietyMember, requireKycApproved, async (re
 // Get specific loan details
 router.get('/:loanId', authenticateSocietyMember, requireKycApproved, async (req, res) => {
   try {
-    const loan = await Loan.findOne({
-      loanId: req.params.loanId,
-      member: req.societyMember._id
-    });
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({
+        _id: loanId,
+        member: memberId
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({
+        loanId: loanId,
+        member: memberId
+      });
+    }
     
     if (!loan) {
       return res.status(404).json({
@@ -191,17 +208,33 @@ router.get('/:loanId', authenticateSocietyMember, requireKycApproved, async (req
     res.status(500).json({
       success: false,
       message: 'Internal server error'
-    });
-  }
-});
+      });
+    }
+  });
 
 // Get loan payment schedule
 router.get('/:loanId/payment-schedule', authenticateSocietyMember, requireKycApproved, async (req, res) => {
   try {
-    const loan = await Loan.findOne({
-      loanId: req.params.loanId,
-      member: req.societyMember._id
-    });
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({
+        _id: loanId,
+        member: memberId
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({
+        loanId: loanId,
+        member: memberId
+      });
+    }
     
     if (!loan) {
       return res.status(404).json({
@@ -252,10 +285,26 @@ router.get('/:loanId/payment-schedule', authenticateSocietyMember, requireKycApp
 // Get loan payment history
 router.get('/:loanId/payment-history', authenticateSocietyMember, requireKycApproved, async (req, res) => {
   try {
-    const loan = await Loan.findOne({
-      loanId: req.params.loanId,
-      member: req.societyMember._id
-    });
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({
+        _id: loanId,
+        member: memberId
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({
+        loanId: loanId,
+        member: memberId
+      });
+    }
     
     if (!loan) {
       return res.status(404).json({
@@ -290,10 +339,26 @@ router.get('/:loanId/payment-history', authenticateSocietyMember, requireKycAppr
 // Get loan summary and statistics
 router.get('/:loanId/summary', authenticateSocietyMember, requireKycApproved, async (req, res) => {
   try {
-    const loan = await Loan.findOne({
-      loanId: req.params.loanId,
-      member: req.societyMember._id
-    });
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({
+        _id: loanId,
+        member: memberId
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({
+        loanId: loanId,
+        member: memberId
+      });
+    }
     
     if (!loan) {
       return res.status(404).json({
@@ -322,7 +387,7 @@ router.get('/:loanId/summary', authenticateSocietyMember, requireKycApproved, as
       isOverdue: loan.isOverdue(),
       nextPayment: loan.paymentSchedule.find(p => p.status === 'PENDING'),
       totalInstallments: loan.paymentSchedule.length,
-      paidInstallments: loan.paymentSchedule.filter(p => p.status === 'PAID').length,
+      paidInstallments: loan.paymentSchedule.filter(p => p.status === 'PENDING').length,
       pendingInstallments: loan.paymentSchedule.filter(p => p.status === 'PENDING').length,
       overdueInstallments: loan.paymentSchedule.filter(p => p.status === 'PENDING' && p.dueDate < new Date()).length,
       progressPercentage: loan.paymentSchedule.length > 0 ? 
@@ -489,10 +554,26 @@ router.get('/types/info', async (req, res) => {
 // Cancel loan application (only if status is PENDING)
 router.put('/:loanId/cancel', authenticateSocietyMember, requireKycApproved, async (req, res) => {
   try {
-    const loan = await Loan.findOne({
-      loanId: req.params.loanId,
-      member: req.societyMember._id
-    });
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({
+        _id: loanId,
+        member: memberId
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({
+        loanId: loanId,
+        member: memberId
+      });
+    }
     
     if (!loan) {
       return res.status(404).json({
@@ -522,6 +603,84 @@ router.put('/:loanId/cancel', authenticateSocietyMember, requireKycApproved, asy
     });
   } catch (error) {
     console.error('Cancel loan error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get loan penalty details (for society members)
+router.get('/:loanId/penalty-details', authenticateSocietyMember, requireKycApproved, async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const memberId = req.societyMember._id;
+    
+    // First verify the loan belongs to this member
+    let loan;
+    
+    // Try to find by _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(loanId)) {
+      loan = await Loan.findOne({ 
+        _id: loanId, 
+        member: memberId 
+      });
+    }
+    
+    // If not found by _id, try to find by loanId (custom string field)
+    if (!loan) {
+      loan = await Loan.findOne({ 
+        loanId: loanId, 
+        member: memberId 
+      });
+    }
+    
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Loan not found'
+      });
+    }
+    
+    // Now get penalty details using the loan's _id
+    const { getLoanPenaltyDetails } = require('../utilities/loanPenaltyCalculator');
+    const result = await getLoanPenaltyDetails(loan._id);
+    
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.message
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: result.data
+    });
+    
+  } catch (error) {
+    console.error('Error getting loan penalty details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Admin endpoint to manually trigger penalty processing
+router.post('/admin/process-penalties', async (req, res) => {
+  try {
+    const { triggerManualProcessing } = require('../utilities/loanPenaltyScheduler');
+    const result = await triggerManualProcessing();
+    
+    res.json({
+      success: true,
+      message: 'Penalty processing completed',
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('Error processing penalties:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

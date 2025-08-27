@@ -113,6 +113,27 @@ const societyMemberSchema = new mongoose.Schema({
     }
   },
   
+  // Bank Documents
+  bankDocuments: {
+    accountStatement: {
+      type: String, // File path
+      default: null
+    },
+    passbook: {
+      type: String, // File path
+      default: null
+    },
+    uploadedAt: {
+      type: Date,
+      default: null
+    },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SocietyMember',
+      default: null
+    }
+  },
+  
   // KYC Status
   kycStatus: {
     type: String,
