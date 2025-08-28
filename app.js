@@ -18,6 +18,8 @@ const adminSocietyRouter = require('./routes/adminSociety');
 const paymentRequestRouter = require('./routes/paymentRequests');
 const loanRouter = require('./routes/loans');
 const adminLoanRouter = require('./routes/adminLoans');
+const receiptRouter = require('./routes/receipts');
+const adminReceiptRouter = require('./routes/adminReceipts');
 
 const app = express();
 
@@ -67,6 +69,8 @@ app.use('/api/admin-society', adminSocietyRouter);
 app.use('/api/payment-requests', paymentRequestRouter);
 app.use('/api/loans', loanRouter);
 app.use('/api/admin/loans', adminLoanRouter);
+app.use('/api/receipts', receiptRouter);
+app.use('/api/admin/receipts', adminReceiptRouter);
 
 // Start loan penalty scheduler
 const { startPenaltyScheduler } = require('./utilities/loanPenaltyScheduler');

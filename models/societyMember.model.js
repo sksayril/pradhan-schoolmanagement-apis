@@ -164,8 +164,8 @@ const societyMemberSchema = new mongoose.Schema({
   // Society Membership Details
   membershipType: {
     type: String,
-    enum: ['basic', 'premium', 'vip'],
-    default: 'basic'
+    enum: ['regular', 'non-regular'],
+    default: 'regular'
   },
   membershipStartDate: {
     type: Date,
@@ -290,5 +290,10 @@ societyMemberSchema.methods.getMembershipStatus = function() {
   if (new Date() > this.membershipEndDate) return 'expired';
   return 'active';
 };
+
+// Indexes for better query performance
+societyMemberSchema.index({ email: 1 });
+societyMemberSchema.index({ memberAccountNumber: 1 });
+societyMemberSchema.index({ agentCode: 1 });
 
 module.exports = mongoose.model('SocietyMember', societyMemberSchema);

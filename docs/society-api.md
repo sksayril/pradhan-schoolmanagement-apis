@@ -74,7 +74,7 @@ Register a new society member with optional agent code.
 ### 2. Society Member Login
 **POST** `/society-member/login`
 
-Authenticate society member and get access token.
+Authenticate society member using either email or member account number and get access token.
 
 **Request Body:**
 ```json
@@ -83,6 +83,17 @@ Authenticate society member and get access token.
   "password": "password123"
 }
 ```
+
+**OR**
+
+```json
+{
+  "memberAccountNumber": "MEM2024000001",
+  "password": "password123"
+}
+```
+
+**Note:** You can use either `email` or `memberAccountNumber` for login. Both fields are optional, but at least one must be provided along with the password.
 
 **Response:**
 ```json

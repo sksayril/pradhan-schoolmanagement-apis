@@ -6,6 +6,7 @@ const Agent = require('../models/agent.model');
 const { authenticateSocietyMember, requireKycApproved } = require('../middleware/auth');
 const { kycUpload, handleUploadError, bankDocumentUpload } = require('../middleware/upload');
 
+
 // Society Member Signup
 router.post('/signup', async (req, res) => {
   try {
@@ -107,42 +108,85 @@ router.post('/signup', async (req, res) => {
 // Society Member Login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    console.log('🔍 Login request body:', req.body);
+    console.log('🔍 Login request body type:', typeof req.body);
+    console.log('🔍 Login request body keys:', Object.keys(req.body || {}));
+    console.log('🔍 Login request headers:', req.headers);
+    console.log('🔍 Content-Type header:', req.headers['content-type']);
+    
+    // Extract credentials with flexible field names
+    const email = req.body.email || req.body.Email || req.body.emailAddress || req.body.email_address || req.body.username || req.body.userName;
+    const memberAccountNumber = req.body.memberAccountNumber || req.body.member_account_number || req.body.accountNumber || req.body.account_number || req.body.memberId || req.body.member_id || req.body.accountId || req.body.account_id || req.body.id;
+    const password = req.body.password || req.body.Password || req.body.pass || req.body.pwd;
 
-    // Validate required fields
-    if (!email || !password) {
+    console.log('📧 Email extracted:', email);
+    console.log('🆔 MemberAccountNumber extracted:', memberAccountNumber);
+    console.log('🔑 Password extracted:', password ? '***' : 'missing');
+
+    // Validate required fields - either email or memberAccountNumber must be provided
+    if (!password) {
+      console.log('❌ Password missing');
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required'
+        message: 'Password is required'
       });
     }
 
-    // Find member by email
-    const member = await SocietyMember.findOne({ email });
+    if (!email && !memberAccountNumber) {
+      console.log('❌ Both email and memberAccountNumber missing');
+      console.log('📧 Email received:', email);
+      console.log('🆔 MemberAccountNumber received:', memberAccountNumber);
+      console.log('🔍 Full request body:', req.body);
+      return res.status(400).json({
+        success: false,
+        message: 'Either email or member account number is required'
+      });
+    }
+
+    let member;
+
+    // Find member by email or memberAccountNumber
+    if (email) {
+      console.log('🔍 Searching by email:', email);
+      member = await SocietyMember.findOne({ email: email.toLowerCase() });
+    } else if (memberAccountNumber) {
+      console.log('🔍 Searching by memberAccountNumber:', memberAccountNumber);
+      member = await SocietyMember.findOne({ memberAccountNumber: memberAccountNumber.toUpperCase() });
+    }
+
     if (!member) {
+      console.log('❌ Member not found');
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials. Please check your email/member account number and password.'
       });
+    } else {
+      console.log('✅ Member found:', member.email, member.memberAccountNumber);
     }
 
     // Check password
+    console.log('🔐 Validating password...');
     const isPasswordValid = await member.comparePassword(password);
     if (!isPasswordValid) {
+      console.log('❌ Password validation failed');
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials. Please check your email/member account number and password.'
       });
+    } else {
+      console.log('✅ Password validation successful');
     }
 
     // Generate JWT token
+    console.log('🔑 Generating JWT token...');
     const token = jwt.sign(
       { id: member._id, type: 'society_member' },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+    console.log('✅ JWT token generated successfully');
 
-    res.json({
+    const responseData = {
       success: true,
       message: 'Login successful',
       data: {
@@ -161,9 +205,13 @@ router.post('/login', async (req, res) => {
         },
         token
       }
-    });
+    };
+    
+    console.log('✅ Sending successful login response');
+    res.json(responseData);
+
   } catch (error) {
-    console.error('Society member login error:', error);
+    console.error('❌ Society member login error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

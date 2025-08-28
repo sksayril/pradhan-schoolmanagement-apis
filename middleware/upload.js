@@ -9,7 +9,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Create subdirectories
-const subdirs = ['kyc', 'courses', 'profiles', 'certificates', 'marksheets', 'agents', 'bank-documents'];
+const subdirs = ['kyc', 'courses', 'profiles', 'certificates', 'marksheets', 'agents', 'bank-documents', 'receipts'];
 subdirs.forEach(dir => {
   const subdir = path.join(uploadsDir, dir);
   if (!fs.existsSync(subdir)) {
@@ -37,6 +37,8 @@ const storage = multer.diskStorage({
       uploadPath = path.join(uploadsDir, 'agents');
     } else if (file.fieldname === 'bankDocument') {
       uploadPath = path.join(uploadsDir, 'bank-documents');
+    } else if (file.fieldname === 'receiptImage') {
+      uploadPath = path.join(uploadsDir, 'receipts');
     }
     
     cb(null, uploadPath);
@@ -70,9 +72,11 @@ const fileFilter = (req, file, cb) => {
     allowedTypes = allowedVideoTypes;
   } else if (file.fieldname === 'certificate' || file.fieldname === 'marksheet') {
     allowedTypes = allowedDocumentTypes;
-  } else if (file.fieldname === 'bankDocument') {
-    allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-  }
+      } else if (file.fieldname === 'bankDocument') {
+      allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    } else if (file.fieldname === 'receiptImage') {
+      allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    }
   
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
@@ -115,6 +119,7 @@ const certificateUpload = upload.single('certificate');
 const marksheetUpload = upload.single('marksheet');
 const profileUpload = upload.single('profilePhoto');
 const bankDocumentUpload = upload.single('bankDocument');
+const receiptImageUpload = upload.single('receiptImage');
 
 // Error handling middleware
 const handleUploadError = (error, req, res, next) => {
@@ -156,5 +161,6 @@ module.exports = {
   marksheetUpload,
   profileUpload,
   bankDocumentUpload,
+  receiptImageUpload,
   handleUploadError
 }; 

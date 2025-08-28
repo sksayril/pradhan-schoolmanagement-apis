@@ -257,11 +257,20 @@ Content-Type: application/json
 POST /api/society-member/login
 Content-Type: application/json
 
+# Login with email
 {
   "email": "john@example.com",
   "password": "password123"
 }
+
+# OR login with member account number
+{
+  "memberAccountNumber": "MEM2024000001",
+  "password": "password123"
+}
 ```
+
+**Note:** You can login using either your email or member account number. Both fields are optional, but at least one must be provided along with the password.
 
 #### Admin Society Login
 ```http
