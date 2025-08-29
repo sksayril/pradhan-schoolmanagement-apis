@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { calculatePaymentSummary, calculateLateFee } = require('../utilities/paymentCalculator');
+const { calculateCDPenalty } = require('../utilities/cdPenaltyCalculator');
 
 const paymentRequestSchema = new mongoose.Schema({
   // Basic Information
@@ -107,6 +108,13 @@ const paymentRequestSchema = new mongoose.Schema({
     min: [0, 'Late fee cannot be negative']
   },
   
+  // CD Penalty (specific penalty for CD payments)
+  cdPenalty: {
+    type: Number,
+    default: 0,
+    min: [0, 'CD penalty cannot be negative']
+  },
+  
   // Total Amount (including late fee)
   totalAmount: {
     type: Number,
@@ -170,8 +178,18 @@ paymentRequestSchema.pre('save', function(next) {
       this.lateFee = 0;
     }
     
-    // Calculate total amount (amount + lateFee)
-    this.totalAmount = (this.amount || 0) + (this.lateFee || 0);
+    // Ensure cdPenalty is initialized
+    if (this.cdPenalty === undefined) {
+      this.cdPenalty = 0;
+    }
+    
+    // Calculate CD penalty for CD payments
+    if (this.paymentType === 'CD' && this.status === 'PENDING') {
+      this.cdPenalty = this.calculateCDPenalty();
+    }
+    
+    // Calculate total amount (amount + lateFee + cdPenalty)
+    this.totalAmount = (this.amount || 0) + (this.lateFee || 0) + (this.cdPenalty || 0);
     
     // Set next due date for RD
     if (this.isNew && this.paymentType === 'RD' && this.recurringDetails) {
@@ -229,9 +247,28 @@ paymentRequestSchema.methods.calculateLateFee = function() {
   return calculateLateFee(this.amount, daysLate);
 };
 
+// Method to calculate CD penalty
+paymentRequestSchema.methods.calculateCDPenalty = function() {
+  if (this.status !== 'PENDING' || this.paymentType !== 'CD') {
+    return 0;
+  }
+  
+  const penalty = calculateCDPenalty(this.dueDate);
+  return penalty.penaltyAmount;
+};
+
+// Method to update CD penalty
+paymentRequestSchema.methods.updateCDPenalty = function() {
+  if (this.paymentType === 'CD' && this.status === 'PENDING') {
+    this.cdPenalty = this.calculateCDPenalty();
+    this.totalAmount = this.amount + this.lateFee + this.cdPenalty;
+  }
+  return this;
+};
+
 // Method to get payment summary (for society member view)
 paymentRequestSchema.methods.getPaymentSummary = function() {
-  return {
+  const summary = {
     requestId: this.requestId,
     paymentType: this.paymentType,
     amount: this.amount,
@@ -251,17 +288,46 @@ paymentRequestSchema.methods.getPaymentSummary = function() {
       totalInstallments: this.recurringDetails.totalInstallments
     } : undefined
   };
+  
+  // Add CD penalty information for CD payments
+  if (this.paymentType === 'CD') {
+    summary.cdPenalty = this.cdPenalty;
+    summary.penaltyDetails = {
+      hasPenalty: this.cdPenalty > 0,
+      penaltyAmount: this.cdPenalty,
+      penaltyPerDay: 10,
+      message: this.cdPenalty > 0 
+        ? `CD penalty: ₹${this.cdPenalty} (₹10 per day after grace period)`
+        : 'No CD penalty applicable'
+    };
+  }
+  
+  return summary;
 };
 
 // Method to get admin view (includes interest rate)
 paymentRequestSchema.methods.getAdminView = function() {
-  return {
+  const adminView = {
     ...this.getPaymentSummary(),
     interestRate: this.interestRate,
     paymentDetails: this.paymentDetails,
     societyMember: this.societyMember,
     createdBy: this.createdBy
   };
+  
+  // Add detailed penalty information for admins
+  if (this.paymentType === 'CD') {
+    adminView.cdPenaltyDetails = {
+      penaltyAmount: this.cdPenalty,
+      penaltyPerDay: 10,
+      gracePeriod: '15 days of month',
+      calculation: this.cdPenalty > 0 
+        ? `₹${this.cdPenalty} penalty (₹10 × ${Math.ceil(this.cdPenalty / 10)} days)`
+        : 'No penalty applicable'
+    };
+  }
+  
+  return adminView;
 };
 
 // Method to calculate maturity amount

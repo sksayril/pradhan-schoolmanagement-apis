@@ -7,6 +7,7 @@ const { createOrder, verifyPayment } = require('../utilities/razorpay');
 const { authenticateAdmin, authenticateSocietyMember } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
+const { getCDPenaltySummary, calculateCDPenalty } = require('../utilities/cdPenaltyCalculator');
 
 // Health check route
 router.get('/health', (req, res) => {
@@ -565,18 +566,30 @@ router.get('/member/pending', authenticateSocietyMember, async (req, res) => {
 
 // ==================== PAYMENT PROCESSING ROUTES ====================
 
-// Create Razorpay order for payment
+// Create Razorpay Order
 router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res) => {
   try {
-    const { requestId } = req.body;
+    const { requestId, amount, currency = 'INR' } = req.body;
 
-    // Add debugging to see what's being received
-    console.log('🔍 Creating Razorpay order for requestId:', requestId);
-    console.log('🔍 Request body:', req.body);
+    // Validate required fields
+    if (!requestId || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'requestId and amount are required'
+      });
+    }
 
+    // Validate currency
+    if (currency !== 'INR') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only INR currency is supported'
+      });
+    }
+
+    // Find payment request
     let paymentRequest;
     
-    // Check if it's a valid MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(requestId)) {
       paymentRequest = await PaymentRequest.findOne({
         _id: requestId,
@@ -584,7 +597,6 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
         status: 'PENDING'
       });
     } else {
-      // If not ObjectId, search by requestId field
       paymentRequest = await PaymentRequest.findOne({
         requestId: requestId,
         societyMember: req.societyMember._id,
@@ -593,41 +605,33 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
     }
 
     if (!paymentRequest) {
-      console.log('❌ Payment request not found for requestId:', requestId);
       return res.status(404).json({
         success: false,
         message: 'Payment request not found or not eligible for payment'
       });
     }
 
-    console.log('✅ Found payment request:', {
-      requestId: paymentRequest.requestId,
-      amount: paymentRequest.totalAmount,
-      paymentMethod: paymentRequest.paymentMethod,
-      status: paymentRequest.status
-    });
-
-    if (paymentRequest.paymentMethod !== 'RAZORPAY') {
+    // Validate amount (should match payment request total amount)
+    const expectedAmount = paymentRequest.totalAmount;
+    if (amount !== expectedAmount) {
       return res.status(400).json({
         success: false,
-        message: 'This payment request does not support Razorpay payment'
+        message: `Amount mismatch. Expected: ${expectedAmount}, Received: ${amount}`
       });
     }
 
     // Create Razorpay order
     const orderResult = await createOrder(
-      paymentRequest.totalAmount,
-      'INR',
+      amount,
+      currency,
       `payment_${paymentRequest.requestId}`
     );
 
     if (!orderResult.success) {
-      console.error('❌ Failed to create Razorpay order:', orderResult.error);
       return res.status(500).json({
         success: false,
         message: 'Failed to create payment order',
-        error: orderResult.error,
-        details: orderResult.details
+        error: orderResult.error
       });
     }
 
@@ -636,24 +640,15 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
     paymentRequest.paymentDetails.razorpayOrderId = orderResult.order.id;
     await paymentRequest.save();
 
-    console.log('✅ Razorpay order created successfully:', {
-      orderId: orderResult.order.id,
-      isMock: orderResult.isMock || false
-    });
-
     res.json({
       success: true,
-      data: {
-        orderId: orderResult.order.id,
-        amount: paymentRequest.totalAmount,
-        currency: 'INR',
-        requestId: paymentRequest.requestId,
-        isMock: orderResult.isMock || false
-      }
+      orderId: orderResult.order.id,
+      amount: amount,
+      currency: currency
     });
 
   } catch (error) {
-    console.error('❌ Create Razorpay order error:', error);
+    console.error('Create Razorpay order error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -662,16 +657,22 @@ router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res
   }
 });
 
-// Verify and process Razorpay payment
+// Verify Payment
 router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, res) => {
   try {
-    const { requestId, paymentId, signature } = req.body;
+    const { requestId, paymentId, orderId, signature, amount } = req.body;
 
-    console.log('🔍 Verifying Razorpay payment for requestId:', requestId);
+    // Validate required fields
+    if (!requestId || !paymentId || !orderId || !signature || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'requestId, paymentId, orderId, signature, and amount are required'
+      });
+    }
 
+    // Find payment request
     let paymentRequest;
     
-    // Check if it's a valid MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(requestId)) {
       paymentRequest = await PaymentRequest.findOne({
         _id: requestId,
@@ -679,7 +680,6 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
         status: 'PENDING'
       });
     } else {
-      // If not ObjectId, search by requestId field
       paymentRequest = await PaymentRequest.findOne({
         requestId: requestId,
         societyMember: req.societyMember._id,
@@ -694,18 +694,32 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
       });
     }
 
+    // Validate order ID matches
+    if (paymentRequest.paymentDetails?.razorpayOrderId !== orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID mismatch'
+      });
+    }
+
+    // Validate amount matches
+    if (amount !== paymentRequest.totalAmount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Amount mismatch'
+      });
+    }
+
     // Check if this is a mock order (for development/testing)
-    const isMockOrder = paymentRequest.paymentDetails?.razorpayOrderId?.includes('_mock');
+    const isMockOrder = orderId.includes('_mock');
     
     if (isMockOrder) {
-      console.log('📝 Processing mock payment for development');
-      
       // For mock orders, skip signature verification
       paymentRequest.status = 'PAID';
       paymentRequest.paidAt = new Date();
       paymentRequest.paymentDetails = {
         ...paymentRequest.paymentDetails,
-        razorpayPaymentId: paymentId || `mock_payment_${Date.now()}`,
+        razorpayPaymentId: paymentId,
         paymentDate: new Date(),
         isMock: true
       };
@@ -714,14 +728,13 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
 
       return res.json({
         success: true,
-        message: 'Mock payment processed successfully (development mode)',
-        data: paymentRequest.getPaymentSummary()
+        message: 'Payment verified successfully'
       });
     }
 
     // Verify payment signature for real orders
     const verificationResult = verifyPayment(
-      paymentRequest.paymentDetails.razorpayOrderId,
+      orderId,
       paymentId,
       signature
     );
@@ -747,12 +760,11 @@ router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, r
 
     res.json({
       success: true,
-      message: 'Payment verified and processed successfully',
-      data: paymentRequest.getPaymentSummary()
+      message: 'Payment verified successfully'
     });
 
   } catch (error) {
-    console.error('Verify Razorpay payment error:', error);
+    console.error('Verify payment error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -817,6 +829,307 @@ router.post('/process-upi-payment', authenticateSocietyMember, async (req, res) 
 
   } catch (error) {
     console.error('Process UPI payment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// ==================== CD PENALTY ROUTES ====================
+
+// Get CD penalty summary for a society member
+router.get('/member/cd-penalties', authenticateSocietyMember, async (req, res) => {
+  try {
+    // Get all CD payment requests for the member
+    const cdPayments = await PaymentRequest.find({
+      societyMember: req.societyMember._id,
+      paymentType: 'CD'
+    }).sort({ dueDate: 1 });
+
+    const penaltySummary = getCDPenaltySummary(cdPayments);
+
+    res.json({
+      success: true,
+      data: penaltySummary
+    });
+
+  } catch (error) {
+    console.error('Get CD penalties error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Get CD penalty details for a specific payment request
+router.get('/member/cd-penalties/:requestId', authenticateSocietyMember, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findOne({
+        _id: requestId,
+        societyMember: req.societyMember._id,
+        paymentType: 'CD'
+      });
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({
+        requestId: requestId,
+        societyMember: req.societyMember._id,
+        paymentType: 'CD'
+      });
+    }
+
+    if (!paymentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'CD payment request not found'
+      });
+    }
+
+    // Calculate current penalty
+    const penalty = calculateCDPenalty(paymentRequest.dueDate);
+    
+    // Update the payment request with current penalty
+    paymentRequest.cdPenalty = penalty.penaltyAmount;
+    paymentRequest.totalAmount = paymentRequest.amount + paymentRequest.lateFee + paymentRequest.cdPenalty;
+    await paymentRequest.save();
+
+    res.json({
+      success: true,
+      data: {
+        paymentRequest: paymentRequest.getPaymentSummary(),
+        penaltyDetails: penalty,
+        totalAmountWithPenalty: paymentRequest.totalAmount
+      }
+    });
+
+  } catch (error) {
+    console.error('Get CD penalty details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Admin: Get CD penalty summary for all members
+router.get('/admin/cd-penalties', authenticateAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 10, societyMemberId } = req.query;
+    const skip = (page - 1) * limit;
+
+    const filter = { paymentType: 'CD' };
+    if (societyMemberId) filter.societyMember = societyMemberId;
+
+    // Get all CD payments with pagination
+    const cdPayments = await PaymentRequest.find(filter)
+      .populate('societyMember', 'firstName lastName email phone memberAccountNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .sort({ dueDate: 1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Calculate penalties for each payment
+    const penaltiesWithDetails = cdPayments.map(payment => {
+      const penalty = calculateCDPenalty(payment.dueDate);
+      return {
+        requestId: payment.requestId,
+        _id: payment._id,
+        societyMember: payment.societyMember,
+        createdBy: payment.createdBy,
+        amount: payment.amount,
+        dueDate: payment.dueDate,
+        status: payment.status,
+        penalty: penalty,
+        totalAmountWithPenalty: payment.amount + penalty.penaltyAmount
+      };
+    });
+
+    const total = await PaymentRequest.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: penaltiesWithDetails,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get admin CD penalties error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Admin: Get CD penalty summary for a specific member
+router.get('/admin/cd-penalties/member/:memberId', authenticateAdmin, async (req, res) => {
+  try {
+    const { memberId } = req.params;
+
+    // Validate member ID
+    if (!mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid member ID'
+      });
+    }
+
+    // Get all CD payments for the member
+    const cdPayments = await PaymentRequest.find({
+      societyMember: memberId,
+      paymentType: 'CD'
+    }).populate('societyMember', 'firstName lastName email phone memberAccountNumber');
+
+    if (cdPayments.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No CD payments found for this member'
+      });
+    }
+
+    const penaltySummary = getCDPenaltySummary(cdPayments);
+
+    res.json({
+      success: true,
+      data: {
+        member: cdPayments[0].societyMember,
+        penaltySummary: penaltySummary
+      }
+    });
+
+  } catch (error) {
+    console.error('Get member CD penalties error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Admin: Update CD penalty for a specific payment request
+router.post('/admin/cd-penalties/:requestId/update', authenticateAdmin, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    
+    let paymentRequest;
+    
+    // Check if it's a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(requestId)) {
+      paymentRequest = await PaymentRequest.findById(requestId);
+    } else {
+      // If not ObjectId, search by requestId field
+      paymentRequest = await PaymentRequest.findOne({ requestId: requestId });
+    }
+
+    if (!paymentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment request not found'
+      });
+    }
+
+    if (paymentRequest.paymentType !== 'CD') {
+      return res.status(400).json({
+        success: false,
+        message: 'This is not a CD payment request'
+      });
+    }
+
+    // Calculate current penalty
+    const penalty = calculateCDPenalty(paymentRequest.dueDate);
+    
+    // Update the payment request with current penalty
+    paymentRequest.cdPenalty = penalty.penaltyAmount;
+    paymentRequest.totalAmount = paymentRequest.amount + paymentRequest.lateFee + paymentRequest.cdPenalty;
+    await paymentRequest.save();
+
+    res.json({
+      success: true,
+      message: 'CD penalty updated successfully',
+      data: {
+        paymentRequest: paymentRequest.getAdminView(),
+        penaltyDetails: penalty,
+        totalAmountWithPenalty: paymentRequest.totalAmount
+      }
+    });
+
+  } catch (error) {
+    console.error('Update CD penalty error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// Admin: Get CD penalty statistics
+router.get('/admin/cd-penalties/statistics', authenticateAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const filter = { paymentType: 'CD' };
+
+    if (startDate && endDate) {
+      filter.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    // Get all CD payments in the date range
+    const cdPayments = await PaymentRequest.find(filter);
+    
+    // Calculate penalties
+    const penalties = cdPayments.map(payment => {
+      const penalty = calculateCDPenalty(payment.dueDate);
+      return {
+        requestId: payment.requestId,
+        amount: payment.amount,
+        penalty: penalty.penaltyAmount,
+        status: payment.status
+      };
+    });
+
+    const totalPayments = penalties.length;
+    const totalAmount = penalties.reduce((sum, item) => sum + item.amount, 0);
+    const totalPenalty = penalties.reduce((sum, item) => sum + item.penalty, 0);
+    const overduePayments = penalties.filter(item => item.penalty > 0).length;
+    const onTimePayments = totalPayments - overduePayments;
+
+    res.json({
+      success: true,
+      data: {
+        totalPayments,
+        totalAmount,
+        totalPenalty,
+        overduePayments,
+        onTimePayments,
+        penaltyRate: totalPayments > 0 ? ((overduePayments / totalPayments) * 100).toFixed(2) : 0,
+        averagePenalty: overduePayments > 0 ? (totalPenalty / overduePayments).toFixed(2) : 0,
+        penaltyBreakdown: penalties
+      }
+    });
+
+  } catch (error) {
+    console.error('Get CD penalty statistics error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',
