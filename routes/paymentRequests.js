@@ -3,30 +3,20 @@ const router = express.Router();
 const PaymentRequest = require('../models/paymentRequest.model');
 const SocietyMember = require('../models/societyMember.model');
 const Admin = require('../models/admin.model');
-const { createOrder, verifyPayment } = require('../utilities/razorpay');
+
 const { authenticateAdmin, authenticateSocietyMember } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
 const { getCDPenaltySummary, calculateCDPenalty } = require('../utilities/cdPenaltyCalculator');
+const razorpay = require('../utilities/razorpay');
+const crypto = require('crypto');
 
 // Health check route
 router.get('/health', (req, res) => {
-  // Check Razorpay configuration
-  const razorpayConfig = {
-    hasKeyId: !!process.env.RAZORPAY_KEY_ID,
-    hasKeySecret: !!process.env.RAZORPAY_KEY_SECRET,
-    usingDummyKeys: !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET
-  };
-
   res.json({
     success: true,
     message: 'Payment Requests API is working',
-    timestamp: new Date().toISOString(),
-    razorpay: {
-      configured: razorpayConfig.hasKeyId && razorpayConfig.hasKeySecret,
-      status: razorpayConfig.usingDummyKeys ? 'Using dummy keys (development mode)' : 'Properly configured',
-      ...razorpayConfig
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -36,7 +26,7 @@ const validatePaymentRequest = [
   body('paymentType').isIn(['RD', 'FD', 'OD', 'CD']).withMessage('Payment type must be RD, FD, OD, or CD'),
   body('amount').isFloat({ min: 1 }).withMessage('Amount must be at least 1'),
   body('interestRate').isFloat({ min: 0, max: 100 }).withMessage('Interest rate must be between 0 and 100'),
-  body('paymentMethod').isIn(['UPI', 'RAZORPAY', 'CASH']).withMessage('Payment method must be UPI, RAZORPAY, or CASH'),
+  body('paymentMethod').isIn(['UPI', 'CASH']).withMessage('Payment method must be UPI or CASH'),
   body('dueDate').isISO8601().withMessage('Valid due date is required'),
   body('description').optional().isLength({ max: 500 }).withMessage('Description cannot exceed 500 characters')
 ];
@@ -567,210 +557,131 @@ router.get('/member/pending', authenticateSocietyMember, async (req, res) => {
 // ==================== PAYMENT PROCESSING ROUTES ====================
 
 // Create Razorpay Order
-router.post('/create-razorpay-order', authenticateSocietyMember, async (req, res) => {
-  try {
-    const { requestId, amount, currency = 'INR' } = req.body;
+router.post('/create-order', authenticateSocietyMember, async (req, res) => {
+    try {
+        const { requestId } = req.body;
+        console.log(`Received request to create order for requestId: ${requestId}`);
+        console.log(`Authenticated society member ID: ${req.societyMember._id}`);
 
-    // Validate required fields
-    if (!requestId || !amount) {
-      return res.status(400).json({
-        success: false,
-        message: 'requestId and amount are required'
-      });
+        if (!requestId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment request ID is required'
+            });
+        }
+
+        let paymentRequest;
+        // Build a query that includes the society member
+        const query = { societyMember: req.societyMember._id };
+
+        if (mongoose.Types.ObjectId.isValid(requestId)) {
+            query._id = requestId;
+        } else {
+            query.requestId = requestId;
+        }
+
+        console.log('Executing query to find payment request:', JSON.stringify(query));
+        paymentRequest = await PaymentRequest.findOne(query);
+
+        if (!paymentRequest) {
+            console.log('Payment request not found with the given query.');
+            return res.status(404).json({
+                success: false,
+                message: 'Payment request not found'
+            });
+        }
+
+        if (paymentRequest.status === 'PAID') {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment request has already been paid'
+            });
+        }
+
+        const options = {
+            amount: paymentRequest.totalAmount * 100, // Amount in paise
+            currency: 'INR',
+            receipt: paymentRequest.requestId,
+        };
+
+        const order = await razorpay.orders.create(options);
+        
+        // Optionally store the order_id in the payment request
+        paymentRequest.paymentDetails.razorpayOrderId = order.id;
+        await paymentRequest.save();
+
+        res.json({
+            success: true,
+            order,
+            // Pass back the internal request ID to be used in verification
+            requestId: paymentRequest._id 
+        });
+    } catch (error) {
+        console.error('Create Razorpay order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message,
+        });
     }
-
-    // Validate currency
-    if (currency !== 'INR') {
-      return res.status(400).json({
-        success: false,
-        message: 'Only INR currency is supported'
-      });
-    }
-
-    // Find payment request
-    let paymentRequest;
-    
-    if (mongoose.Types.ObjectId.isValid(requestId)) {
-      paymentRequest = await PaymentRequest.findOne({
-        _id: requestId,
-        societyMember: req.societyMember._id,
-        status: 'PENDING'
-      });
-    } else {
-      paymentRequest = await PaymentRequest.findOne({
-        requestId: requestId,
-        societyMember: req.societyMember._id,
-        status: 'PENDING'
-      });
-    }
-
-    if (!paymentRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment request not found or not eligible for payment'
-      });
-    }
-
-    // Validate amount (should match payment request total amount)
-    const expectedAmount = paymentRequest.totalAmount;
-    if (amount !== expectedAmount) {
-      return res.status(400).json({
-        success: false,
-        message: `Amount mismatch. Expected: ${expectedAmount}, Received: ${amount}`
-      });
-    }
-
-    // Create Razorpay order
-    const orderResult = await createOrder(
-      amount,
-      currency,
-      `payment_${paymentRequest.requestId}`
-    );
-
-    if (!orderResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create payment order',
-        error: orderResult.error
-      });
-    }
-
-    // Update payment request with order ID
-    paymentRequest.paymentDetails = paymentRequest.paymentDetails || {};
-    paymentRequest.paymentDetails.razorpayOrderId = orderResult.order.id;
-    await paymentRequest.save();
-
-    res.json({
-      success: true,
-      orderId: orderResult.order.id,
-      amount: amount,
-      currency: currency
-    });
-
-  } catch (error) {
-    console.error('Create Razorpay order error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message
-    });
-  }
 });
 
-// Verify Payment
-router.post('/verify-razorpay-payment', authenticateSocietyMember, async (req, res) => {
-  try {
-    const { requestId, paymentId, orderId, signature, amount } = req.body;
+// Verify Razorpay Payment
+router.post('/verify-payment', async (req, res) => {
+    try {
+        const { order_id, payment_id, signature, requestId } = req.body;
 
-    // Validate required fields
-    if (!requestId || !paymentId || !orderId || !signature || !amount) {
-      return res.status(400).json({
-        success: false,
-        message: 'requestId, paymentId, orderId, signature, and amount are required'
-      });
+        if (!order_id || !payment_id || !signature || !requestId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields for verification'
+            });
+        }
+
+        const generated_signature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+            .update(`${order_id}|${payment_id}`)
+            .digest('hex');
+
+        if (generated_signature !== signature) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid signature'
+            });
+        }
+
+        let paymentRequest = await PaymentRequest.findById(requestId);
+
+        if (!paymentRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment request not found'
+            });
+        }
+
+        paymentRequest.status = 'PAID';
+        paymentRequest.paidAt = new Date();
+        paymentRequest.paymentDetails.transactionId = payment_id;
+        paymentRequest.paymentDetails.paymentDate = new Date();
+        paymentRequest.paymentDetails.razorpayOrderId = order_id;
+        paymentRequest.paymentDetails.razorpayPaymentId = payment_id;
+        paymentRequest.paymentDetails.razorpaySignature = signature;
+
+        await paymentRequest.save();
+
+        res.json({
+            success: true,
+            message: 'Payment verified successfully',
+            data: paymentRequest.getPaymentSummary(),
+        });
+    } catch (error) {
+        console.error('Verify Razorpay payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message,
+        });
     }
-
-    // Find payment request
-    let paymentRequest;
-    
-    if (mongoose.Types.ObjectId.isValid(requestId)) {
-      paymentRequest = await PaymentRequest.findOne({
-        _id: requestId,
-        societyMember: req.societyMember._id,
-        status: 'PENDING'
-      });
-    } else {
-      paymentRequest = await PaymentRequest.findOne({
-        requestId: requestId,
-        societyMember: req.societyMember._id,
-        status: 'PENDING'
-      });
-    }
-
-    if (!paymentRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment request not found'
-      });
-    }
-
-    // Validate order ID matches
-    if (paymentRequest.paymentDetails?.razorpayOrderId !== orderId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Order ID mismatch'
-      });
-    }
-
-    // Validate amount matches
-    if (amount !== paymentRequest.totalAmount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Amount mismatch'
-      });
-    }
-
-    // Check if this is a mock order (for development/testing)
-    const isMockOrder = orderId.includes('_mock');
-    
-    if (isMockOrder) {
-      // For mock orders, skip signature verification
-      paymentRequest.status = 'PAID';
-      paymentRequest.paidAt = new Date();
-      paymentRequest.paymentDetails = {
-        ...paymentRequest.paymentDetails,
-        razorpayPaymentId: paymentId,
-        paymentDate: new Date(),
-        isMock: true
-      };
-
-      await paymentRequest.save();
-
-      return res.json({
-        success: true,
-        message: 'Payment verified successfully'
-      });
-    }
-
-    // Verify payment signature for real orders
-    const verificationResult = verifyPayment(
-      orderId,
-      paymentId,
-      signature
-    );
-
-    if (!verificationResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment verification failed',
-        error: verificationResult.message
-      });
-    }
-
-    // Update payment request
-    paymentRequest.status = 'PAID';
-    paymentRequest.paidAt = new Date();
-    paymentRequest.paymentDetails = {
-      ...paymentRequest.paymentDetails,
-      razorpayPaymentId: paymentId,
-      paymentDate: new Date()
-    };
-
-    await paymentRequest.save();
-
-    res.json({
-      success: true,
-      message: 'Payment verified successfully'
-    });
-
-  } catch (error) {
-    console.error('Verify payment error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message
-    });
-  }
 });
 
 // Process UPI payment

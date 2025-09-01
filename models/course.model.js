@@ -94,8 +94,7 @@ const courseSchema = new mongoose.Schema({
       fileUrl: String,
       fileSize: Number // in MB
     }],
-    razorpayProductId: String,
-    razorpayPriceId: String
+
   },
   
   // Offline Course Specific Fields

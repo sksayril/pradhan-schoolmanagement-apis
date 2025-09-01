@@ -69,7 +69,7 @@ describe('Payment Requests API', () => {
           paymentType: 'RD',
           amount: 5000,
           interestRate: 8.5,
-          paymentMethod: 'RAZORPAY',
+          paymentMethod: 'UPI',
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
           description: 'Monthly RD contribution',
           duration: 12,
@@ -145,7 +145,7 @@ describe('Payment Requests API', () => {
           paymentType: 'INVALID',
           amount: 5000,
           interestRate: 8.5,
-          paymentMethod: 'RAZORPAY',
+          paymentMethod: 'UPI',
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           description: 'Test payment'
         };
@@ -186,7 +186,7 @@ describe('Payment Requests API', () => {
             paymentType: 'RD',
             amount: 5000,
             interestRate: 8.5,
-            paymentMethod: 'RAZORPAY',
+            paymentMethod: 'UPI',
             dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             description: 'RD 1',
             duration: 12,
@@ -297,7 +297,7 @@ describe('Payment Requests API', () => {
         paymentType: 'RD',
         amount: 5000,
         interestRate: 8.5,
-        paymentMethod: 'RAZORPAY',
+        paymentMethod: 'UPI',
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         description: 'Monthly RD contribution',
         duration: 12,
@@ -350,7 +350,7 @@ describe('Payment Requests API', () => {
         paymentType: 'RD',
         amount: 5000,
         interestRate: 8.5,
-        paymentMethod: 'RAZORPAY',
+        paymentMethod: 'UPI',
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         description: 'Test RD',
         duration: 12,
@@ -363,19 +363,7 @@ describe('Payment Requests API', () => {
       requestId = paymentRequest._id;
     });
 
-    describe('POST /api/payment-requests/create-razorpay-order', () => {
-      it('should create Razorpay order', async () => {
-        const response = await request(app)
-          .post('/api/payment-requests/create-razorpay-order')
-          .set('Authorization', `Bearer ${memberToken}`)
-          .send({ requestId });
 
-        expect(response.status).toBe(200);
-        expect(response.body.success).toBe(true);
-        expect(response.body.data.orderId).toBeDefined();
-        expect(response.body.data.amount).toBe(5000);
-      });
-    });
 
     describe('POST /api/payment-requests/process-upi-payment', () => {
       it('should process UPI payment', async () => {

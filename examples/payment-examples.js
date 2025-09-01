@@ -18,7 +18,7 @@ async function createRDPaymentRequest() {
       paymentType: 'RD',
       amount: 5000,
       interestRate: 8.5,
-      paymentMethod: 'RAZORPAY',
+              paymentMethod: 'UPI',
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       description: 'Monthly RD contribution for January 2024',
       duration: 12,
@@ -129,24 +129,7 @@ async function getPendingPayments() {
   }
 }
 
-// Example 6: Society member creates Razorpay order
-async function createRazorpayOrder(requestId) {
-  try {
-    const response = await axios.post(`${BASE_URL}/payment-requests/create-razorpay-order`, {
-      requestId: requestId
-    }, {
-      headers: {
-        'Authorization': `Bearer ${MEMBER_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    });
 
-    console.log('Razorpay Order Created:', response.data);
-    return response.data.data;
-  } catch (error) {
-    console.error('Error creating Razorpay order:', error.response?.data || error.message);
-  }
-}
 
 // Example 7: Society member processes UPI payment
 async function processUPIPayment(requestId) {
@@ -237,9 +220,7 @@ async function completePaymentWorkflow() {
   // Step 3: Member gets pending payments
   await getPendingPayments();
   
-  // Step 4: Member creates Razorpay order
-  const orderData = await createRazorpayOrder(rdRequestId);
-  if (!orderData) return;
+
   
   // Step 5: Admin marks payment as received (simulating successful payment)
   await markPaymentAsReceived(rdRequestId);
@@ -296,7 +277,7 @@ module.exports = {
   createODPaymentRequest,
   getMemberPaymentRequests,
   getPendingPayments,
-  createRazorpayOrder,
+
   processUPIPayment,
   markPaymentAsReceived,
   getPaymentStatistics,

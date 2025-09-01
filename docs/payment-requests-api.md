@@ -484,74 +484,7 @@ Retrieves all pending payment requests for the authenticated member.
 
 ## Payment Processing Routes
 
-### 1. Create Razorpay Order
-**POST** `/create-razorpay-order`
-
-Creates a Razorpay order for online payment.
-
-**Request Body:**
-```json
-{
-  "requestId": "507f1f77bcf86cd799439011"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "orderId": "order_1234567890",
-    "amount": 5000,
-    "currency": "INR",
-    "requestId": "PR202412001234"
-  }
-}
-```
-
-### 2. Verify Razorpay Payment
-**POST** `/verify-razorpay-payment`
-
-Verifies and processes Razorpay payment.
-
-**Request Body:**
-```json
-{
-  "requestId": "507f1f77bcf86cd799439011",
-  "paymentId": "pay_1234567890",
-  "signature": "razorpay_signature_here"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Payment verified and processed successfully",
-  "data": {
-    "requestId": "PR202412001234",
-    "paymentType": "RD",
-    "amount": 5000,
-    "totalAmount": 5000,
-    "dueDate": "2024-02-15T00:00:00.000Z",
-    "status": "PAID",
-    "paymentMethod": "RAZORPAY",
-    "description": "Monthly RD contribution",
-    "isOverdue": false,
-    "lateFee": 0,
-    "maturityDate": "2025-01-15T00:00:00.000Z",
-    "duration": 12,
-    "recurringDetails": {
-      "frequency": "MONTHLY",
-      "nextDueDate": "2024-03-15T00:00:00.000Z",
-      "installmentsPaid": 0,
-      "totalInstallments": 12
-    }
-  }
-}
-```
-
-### 3. Process UPI Payment
+### 1. Process UPI Payment
 **POST** `/process-upi-payment`
 
 Processes UPI payment.
@@ -726,3 +659,74 @@ The following indexes are created for optimal performance:
 - Interest rates are stored as percentages (e.g., 8.5 for 8.5%)
 - Duration is stored in months for RD/FD payments
 - The system automatically handles late fee calculations for overdue payments
+
+---
+
+## 9. Create Razorpay Order
+
+This endpoint initiates a payment by creating a Razorpay order based on an existing payment request.
+
+- **URL**: `/api/payment-requests/create-order`
+- **Method**: `POST`
+- **Authentication**: `SocietyMember`
+- **Headers**:
+  - `Authorization: Bearer <token>`
+
+### Request Body
+
+```json
+{
+  "requestId": "6054c2a5b6c2b12f4c8d4a5e"
+}
+```
+
+### Success Response (`200 OK`)
+
+```json
+{
+    "success": true,
+    "order": {
+        "id": "order_XXXXXXXXXXXXXX",
+        "entity": "order",
+        "amount": 50000,
+        "currency": "INR",
+        "receipt": "PR202403123456",
+        "status": "created"
+    },
+    "requestId": "6054c2a5b6c2b12f4c8d4a5e"
+}
+```
+
+---
+
+## 10. Verify Razorpay Payment
+
+This endpoint verifies the authenticity of a payment after the user completes the transaction.
+
+- **URL**: `/api/payment-requests/verify-payment`
+- **Method**: `POST`
+- **Authentication**: None (Signature-based)
+
+### Request Body
+
+```json
+{
+  "order_id": "order_XXXXXXXXXXXXXX",
+  "payment_id": "pay_YYYYYYYYYYYYYY",
+  "signature": "your_razorpay_signature",
+  "requestId": "6054c2a5b6c2b12f4c8d4a5e"
+}
+```
+
+### Success Response (`200 OK`)
+
+```json
+{
+    "success": true,
+    "message": "Payment verified successfully",
+    "data": {
+        "requestId": "PR202403123456",
+        "status": "PAID"
+    }
+}
+```

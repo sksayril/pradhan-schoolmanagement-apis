@@ -6,7 +6,7 @@ const Course = require('../models/course.model');
 const Batch = require('../models/batch.model');
 const { authenticateStudent, requireKycApproved } = require('../middleware/auth');
 const { kycUpload, handleUploadError } = require('../middleware/upload');
-const { createOrder, verifyPayment } = require('../utilities/razorpay');
+
 
 // Normalize filesystem path to web URL path under /uploads
 function toWebPath(filePath) {
@@ -381,31 +381,20 @@ router.post('/enroll/online/:courseId', authenticateStudent, requireKycApproved,
       });
     }
 
-    // Create Razorpay order
-    const orderResult = await createOrder(course.price, 'INR', `course_${course._id}_${req.student._id}`);
-    
-    if (!orderResult.success) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create payment order'
-      });
-    }
-
     // Add enrollment with pending payment
     req.student.enrollments.push({
       course: course._id,
       paymentAmount: course.price,
-      paymentMethod: 'online',
-      razorpayOrderId: orderResult.order.id
+      paymentMethod: 'online'
     });
 
     await req.student.save();
 
     res.json({
       success: true,
-      message: 'Enrollment initiated',
+      message: 'Enrollment initiated successfully',
       data: {
-        orderId: orderResult.order.id,
+        courseId: course._id,
         amount: course.price,
         currency: 'INR'
       }
@@ -419,58 +408,7 @@ router.post('/enroll/online/:courseId', authenticateStudent, requireKycApproved,
   }
 });
 
-// Verify Payment and Complete Enrollment
-router.post('/verify-payment', authenticateStudent, requireKycApproved, async (req, res) => {
-  try {
-    const { orderId, paymentId, signature } = req.body;
 
-    // Verify payment signature
-    const verificationResult = verifyPayment(orderId, paymentId, signature);
-    if (!verificationResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment verification failed'
-      });
-    }
-
-    // Find enrollment with this order ID
-    const enrollment = req.student.enrollments.find(
-      e => e.razorpayOrderId === orderId
-    );
-
-    if (!enrollment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Enrollment not found'
-      });
-    }
-
-    // Update enrollment status
-    enrollment.paymentStatus = 'completed';
-    enrollment.razorpayPaymentId = paymentId;
-    enrollment.isActive = true;
-
-    await req.student.save();
-
-    // Update course enrollment count
-    const course = await Course.findById(enrollment.course);
-    if (course) {
-      course.totalEnrollments += 1;
-      await course.save();
-    }
-
-    res.json({
-      success: true,
-      message: 'Payment verified and enrollment completed successfully'
-    });
-  } catch (error) {
-    console.error('Payment verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
 
 // Get Student Enrollments
 router.get('/enrollments', authenticateStudent, requireKycApproved, async (req, res) => {

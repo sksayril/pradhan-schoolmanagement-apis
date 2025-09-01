@@ -64,7 +64,7 @@ const paymentRequestSchema = new mongoose.Schema({
   // Payment Method
   paymentMethod: {
     type: String,
-    enum: ['UPI', 'RAZORPAY', 'CASH'],
+    enum: ['UPI', 'CASH', 'RAZORPAY'],
     required: true
   },
   
@@ -79,14 +79,15 @@ const paymentRequestSchema = new mongoose.Schema({
   paymentDetails: {
     transactionId: String,
     paymentDate: Date,
-    razorpayOrderId: String,
-    razorpayPaymentId: String,
     upiTransactionId: String,
     cashReceiptNumber: String,
     receivedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Admin'
-    }
+    },
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
+    razorpaySignature: String
   },
   
   // Description/Notes

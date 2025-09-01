@@ -154,8 +154,7 @@ const studentSchema = new mongoose.Schema({
       enum: ['cash', 'online'],
       required: true
     },
-    razorpayOrderId: String,
-    razorpayPaymentId: String,
+
     isActive: {
       type: Boolean,
       default: true

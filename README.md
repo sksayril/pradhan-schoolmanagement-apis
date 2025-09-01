@@ -72,7 +72,7 @@ A comprehensive REST API for managing students, courses, batches, KYC verificati
 - **Mongoose** - ODM
 - **JWT** - Authentication
 - **Multer** - File uploads
-- **Razorpay** - Payment gateway
+
 - **bcryptjs** - Password hashing
 
 ## Installation
@@ -586,12 +586,7 @@ Authorization: Bearer <admin_token>
 
 ## Payment Integration
 
-The system integrates with Razorpay for online course payments:
-
-1. **Order Creation** - Creates payment orders for online courses
-2. **Payment Verification** - Verifies payment signatures
-3. **Product Management** - Creates Razorpay products and prices
-4. **Refund Support** - Handles payment refunds
+The system supports online course payments through direct enrollment without external payment gateways.
 
 ## Development
 
@@ -608,8 +603,7 @@ npm test
 ### Environment Variables
 - `MONGODB_URI` - MongoDB connection string
 - `JWT_SECRET` - Secret key for JWT tokens
-- `RAZORPAY_KEY_ID` - Razorpay public key
-- `RAZORPAY_KEY_SECRET` - Razorpay secret key
+
 - `PORT` - Server port (default: 3000)
 - `NODE_ENV` - Environment (development/production)
 - `ALLOWED_ORIGINS` - CORS allowed origins

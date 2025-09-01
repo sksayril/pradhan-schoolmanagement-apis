@@ -8,7 +8,7 @@ const Batch = require('../models/batch.model');
 const SocietyMember = require('../models/societyMember.model'); // Added for new routes
 const { authenticateAdmin, requirePermission } = require('../middleware/auth');
 const { courseUpload, certificateUpload, marksheetUpload, handleUploadError } = require('../middleware/upload');
-const { createProduct, createPrice } = require('../utilities/razorpay');
+
 
 // Normalize filesystem path to web URL path under /uploads
 function toWebPath(filePath) {
@@ -687,22 +687,6 @@ router.post('/courses', authenticateAdmin, requirePermission('manage_courses'), 
     // Handle online course data
     if (courseType === 'online') {
       courseData.onlineCourse = {};
-      
-      // Create Razorpay product and price for online courses
-      try {
-        const productResult = await createProduct(title, description);
-        if (productResult.success) {
-          courseData.onlineCourse.razorpayProductId = productResult.product.id;
-          
-          const priceResult = await createPrice(productResult.product.id, priceNum);
-          if (priceResult.success) {
-            courseData.onlineCourse.razorpayPriceId = priceResult.price.id;
-          }
-        }
-      } catch (error) {
-        console.error('Razorpay integration error:', error);
-        // Continue without Razorpay integration if it fails
-      }
     }
 
     // Handle uploaded files
