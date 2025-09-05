@@ -89,22 +89,36 @@ router.post('/signup', async (req, res) => {
 // Student Login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, studentId, password } = req.body;
 
-    // Validate required fields
-    if (!email || !password) {
+    // Validate required fields - either email or studentId must be provided
+    if ((!email && !studentId) || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required'
+        message: 'Either email or student ID, and password are required'
       });
     }
 
-    // Find student by email
-    const student = await Student.findOne({ email });
+    // Validate that only one identifier is provided
+    if (email && studentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide either email or student ID, not both'
+      });
+    }
+
+    // Find student by email or studentId
+    let student;
+    if (email) {
+      student = await Student.findOne({ email });
+    } else {
+      student = await Student.findOne({ studentId });
+    }
+
     if (!student) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials'
       });
     }
 
@@ -113,7 +127,7 @@ router.post('/login', async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid credentials'
       });
     }
 

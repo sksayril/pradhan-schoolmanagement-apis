@@ -1,139 +1,146 @@
-/**
- * Test flexible login field names
- */
-
 const request = require('supertest');
 const app = require('../app');
+const Student = require('../models/student.model');
 
-async function testFlexibleLogin() {
-  console.log('🧪 Testing Flexible Login Field Names...\n');
+describe('Student Flexible Login Tests', () => {
+  let testStudent;
 
-  // Test 1: Standard field names
-  console.log('Test 1: Standard field names (email, password)');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        email: 'test@example.com',
-        password: 'password123'
-      });
+  beforeAll(async () => {
+    // Create a test student
+    testStudent = new Student({
+      firstName: 'Test',
+      lastName: 'Student',
+      email: 'teststudent@example.com',
+      phone: '9876543210',
+      dateOfBirth: new Date('1995-01-01'),
+      gender: 'male',
+      address: {
+        street: '123 Test Street',
+        city: 'Test City',
+        state: 'Test State',
+        pincode: '123456'
+      },
+      password: 'testpassword123'
+    });
     
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    await testStudent.save();
+  });
 
-  console.log('---\n');
+  afterAll(async () => {
+    // Clean up test student
+    if (testStudent) {
+      await Student.findByIdAndDelete(testStudent._id);
+    }
+  });
 
-  // Test 2: Capitalized field names
-  console.log('Test 2: Capitalized field names (Email, Password)');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        Email: 'test@example.com',
-        Password: 'password123'
-      });
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+  describe('POST /api/students/login', () => {
+    it('should login with email successfully', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          email: 'teststudent@example.com',
+          password: 'testpassword123'
+        });
 
-  console.log('---\n');
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Login successful');
+      expect(response.body.data.student.email).toBe('teststudent@example.com');
+      expect(response.body.data.student.studentId).toBe(testStudent.studentId);
+      expect(response.body.data.token).toBeDefined();
+    });
 
-  // Test 3: Alternative field names
-  console.log('Test 3: Alternative field names (username, pwd)');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        username: 'test@example.com',
-        pwd: 'password123'
-      });
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    it('should login with student ID successfully', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          studentId: testStudent.studentId,
+          password: 'testpassword123'
+        });
 
-  console.log('---\n');
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Login successful');
+      expect(response.body.data.student.email).toBe('teststudent@example.com');
+      expect(response.body.data.student.studentId).toBe(testStudent.studentId);
+      expect(response.body.data.token).toBeDefined();
+    });
 
-  // Test 4: Member account number with standard field names
-  console.log('Test 4: Member account number with standard field names');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        memberAccountNumber: 'MEM2024000001',
-        password: 'password123'
-      });
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    it('should reject login with both email and student ID', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          email: 'teststudent@example.com',
+          studentId: testStudent.studentId,
+          password: 'testpassword123'
+        });
 
-  console.log('---\n');
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Please provide either email or student ID, not both');
+    });
 
-  // Test 5: Member account number with alternative field names
-  console.log('Test 5: Member account number with alternative field names (id, Password)');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        id: 'MEM2024000001',
-        Password: 'password123'
-      });
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    it('should reject login without email or student ID', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          password: 'testpassword123'
+        });
 
-  console.log('---\n');
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Either email or student ID, and password are required');
+    });
 
-  // Test 6: Empty request body
-  console.log('Test 6: Empty request body');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({});
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    it('should reject login without password', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          email: 'teststudent@example.com'
+        });
 
-  console.log('---\n');
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Either email or student ID, and password are required');
+    });
 
-  // Test 7: Only password
-  console.log('Test 7: Only password');
-  try {
-    const response = await request(app)
-      .post('/api/society-member/login')
-      .send({
-        password: 'password123'
-      });
-    
-    console.log('Status:', response.status);
-    console.log('Response:', response.body.message || response.body);
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
+    it('should reject login with invalid email', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          email: 'invalid@example.com',
+          password: 'testpassword123'
+        });
 
-  console.log('\n✅ Flexible login tests completed!');
-}
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Invalid credentials');
+    });
 
-// Run the test if this file is executed directly
-if (require.main === module) {
-  testFlexibleLogin().catch(console.error);
-}
+    it('should reject login with invalid student ID', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          studentId: 'INVALID123',
+          password: 'testpassword123'
+        });
 
-module.exports = { testFlexibleLogin };
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Invalid credentials');
+    });
+
+    it('should reject login with wrong password', async () => {
+      const response = await request(app)
+        .post('/api/students/login')
+        .send({
+          email: 'teststudent@example.com',
+          password: 'wrongpassword'
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Invalid credentials');
+    });
+  });
+});
