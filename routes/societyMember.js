@@ -23,6 +23,9 @@ router.post('/signup', async (req, res) => {
       emergencyContact
     } = req.body;
 
+    // Normalize agentCode: treat empty string as null
+    const normalizedAgentCode = agentCode && agentCode.trim() !== '' ? agentCode.toUpperCase() : null;
+
     // Check if member already exists
     const existingMember = await SocietyMember.findOne({ email });
     if (existingMember) {
@@ -33,15 +36,25 @@ router.post('/signup', async (req, res) => {
     }
 
     // Validate agent code if provided
-    let referredBy = null;
-    if (agentCode) {
-      const agent = await Agent.findOne({ agentCode: agentCode.toUpperCase() });
+    if (normalizedAgentCode) {
+      const agent = await Agent.findOne({ agentCode: normalizedAgentCode });
       if (!agent || !agent.isActive) {
         return res.status(400).json({
           success: false,
           message: 'Invalid or inactive agent code'
         });
       }
+    }
+
+    // Clean up emergencyContact: if all fields are empty, set to undefined
+    let cleanedEmergencyContact = emergencyContact;
+    if (
+      emergencyContact &&
+      (!emergencyContact.name || emergencyContact.name.trim() === '') &&
+      (!emergencyContact.relationship || emergencyContact.relationship.trim() === '') &&
+      (!emergencyContact.phone || emergencyContact.phone.trim() === '')
+    ) {
+      cleanedEmergencyContact = undefined;
     }
 
     // Create new society member
@@ -54,15 +67,15 @@ router.post('/signup', async (req, res) => {
       gender,
       address,
       password,
-      agentCode: agentCode ? agentCode.toUpperCase() : null,
-      emergencyContact
+      agentCode: normalizedAgentCode,
+      emergencyContact: cleanedEmergencyContact
     });
 
     await member.save();
 
     // Update agent referral count if agent code was provided
-    if (agentCode) {
-      const agent = await Agent.findOne({ agentCode: agentCode.toUpperCase() });
+    if (normalizedAgentCode) {
+      const agent = await Agent.findOne({ agentCode: normalizedAgentCode });
       if (agent) {
         agent.totalReferrals += 1;
         agent.activeReferrals += 1;
@@ -97,10 +110,11 @@ router.post('/signup', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Society member signup error:', error);
+    console.error('Society member signup error:', error.message, error.stack);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      error: error.message // TEMP: Remove in production
     });
   }
 });
